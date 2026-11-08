@@ -1,0 +1,38 @@
+# Secrets & environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Runtime data
+/writable/*
+!/writable/.htaccess
+!/writable/index.html
+!/writable/logs/
+/writable/logs/*
+!/writable/logs/index.html
+/writable/cache/*
+/writable/debugbar/*
+/writable/session/*
+/writable/backups/*
+/writable/backup-ui-*/
+/tools/
+
+# Uploaded & generated files
+/public/uploads/*
+!/public/uploads/.htaccess
+!/public/uploads/index.html
+/public/backups/
+/public/apk/
+
+# Local/editor/backup artifacts
+*.bak
+*.bak-*
+*.log
+desktop.ini
+.DS_Store
+.idea/
+.vscode/

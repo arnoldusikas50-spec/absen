@@ -1,0 +1,73 @@
+# ==========================================================================
+# TEMPLATE MASTER CRONTAB — absensi.ikas.my.id (CodeIgniter 4)
+# Salinan sinkron dari: /var/spool/cron/crontabs/ikas-absensi
+#
+# CARA INSTALL / UPDATE:
+#   1. Edit file ini.
+#   2. Pasang sebagai user ikas-absensi:
+#        sudo crontab -u ikas-absensi cronjob
+#   3. Verifikasi:
+#        sudo crontab -u ikas-absensi -l
+#
+# Catatan:
+#   - Semua jam memakai WITA (UTC+8) — sama dengan appTimezone di app/Config/App.php.
+#     (Beberapa cron yang dirujuk .env pakai CRON_TZ=Asia/Makassar; nilai sama.)
+#   - Log: writable/logs/cron.log — SETELAH deploy jangan lupa:
+#        sudo chown -R ikas-absensi:ikas-absensi writable/
+#     Kalau file log jadi milik root, redirect ">>" gagal (Permission denied)
+#     dan perintah cron TIDAK dieksekusi sama sekali (kasus 28 Okt 2026).
+#   - Key wajib sama dengan CRON_SECRET_KEY di .env.
+#   - Backup/referensi: lihat CRONTAB.MD di root proyek.
+# ==========================================================================
+
+CRONTAB_TZ=Asia/Makassar
+SHELL=/bin/bash
+
+APP_DIR=/home/ikas-absensi/htdocs/absensi.ikas.my.id
+LOG=/home/ikas-absensi/htdocs/absensi.ikas.my.id/writable/logs/cron.log
+BASE_URL=https://absensi.ikas.my.id
+CRON_KEY=9a60309b14be260788f29259cb8ed49b4391b47fe9ad0215885e555d
+
+# --- 1. Ucapan pagi 06:00 --------------------------------------------------
+0 6 * * * curl --silent --show-error "$BASE_URL/cron/ucapan-pagi?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 2. Ucapan pulang 15:00 (hari kerja saja) ------------------------------
+0 15 * * * curl --silent --show-error "$BASE_URL/cron/ucapan-sore?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 3. Proses harian 18:00 ------------------------------------------------
+0 18 * * * curl --silent --show-error "$BASE_URL/cron/daily?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 3b. Rekap piket harian 18:30 (30 menit setelah proses harian) ---------
+30 18 * * * curl --silent --show-error "$BASE_URL/cron/rekap-piket?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 4. Rekap denda mingguan, Sabtu 18:05 ----------------------------------
+5 18 * * 6 curl --silent --show-error "$BASE_URL/cron/weekly-denda?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 5. PDF rekap bulanan, tgl 1 jam 07:10 ---------------------------------
+10 7 1 * * curl --silent --show-error "$BASE_URL/cron/monthly-pdf?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 6. Rekap semester, 1 Juli & 2 Januari jam 19:00 -----------------------
+0 19 1 7 * curl --silent --show-error "$BASE_URL/cron/semester-recap?key=$CRON_KEY&tahun=$(date +\%Y)&semester=1" >> "$LOG" 2>&1
+0 19 2 1 * curl --silent --show-error "$BASE_URL/cron/semester-recap?key=$CRON_KEY&tahun=$(( $(date +\%Y) - 1 ))&semester=2" >> "$LOG" 2>&1
+
+# --- 7. Sinkron poin siswa, harian 19:30 -----------------------------------
+30 19 * * * curl --silent --show-error "$BASE_URL/cron/poin-siswa?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 8. Health check tiap 10 menit -----------------------------------------
+*/10 * * * * cd $APP_DIR && php spark health:check >> "$LOG" 2>&1
+
+# --- 9. Backup database, tiap hari 02:00 -----------------------------------
+0 2 * * * cd $APP_DIR && php spark db:backup >> "$LOG" 2>&1
+
+# ==========================================================================
+# CRONTAB ujian.ikas.my.id — aplikasi CBT
+# Semua jam WITA (UTC+8). Path & log ditulis penuh (tanpa variabel bersarang).
+# ==========================================================================
+# --- Konsumen antrian scoring (tiap menit, batch kecil) ---------------------
+* * * * * cd /home/ikas-absensi/htdocs/ujian.ikas.my.id && php spark cbt:proses_scoring_queue >> /home/ikas-absensi/htdocs/ujian.ikas.my.id/writable/logs/cron.log 2>&1
+# --- Tutup otomatis sesi ujian yang lewat waktu (tiap 5 menit) -------------
+*/5 * * * * cd /home/ikas-absensi/htdocs/ujian.ikas.my.id && php spark cbt:auto_close_expired >> /home/ikas-absensi/htdocs/ujian.ikas.my.id/writable/logs/cron.log 2>&1
+# --- Pemeliharaan kualitas bank soal (harian 01:00) ------------------------
+0 1 * * * cd /home/ikas-absensi/htdocs/ujian.ikas.my.id && php spark cbt:quality_maintenance >> /home/ikas-absensi/htdocs/ujian.ikas.my.id/writable/logs/cron.log 2>&1
+# --- Sinkronisasi Dapodik (harian 02:00, ikut pengaturan auto_sync) --------
+0 2 * * * cd /home/ikas-absensi/htdocs/ujian.ikas.my.id && php spark dapodik:sync >> /home/ikas-absensi/htdocs/ujian.ikas.my.id/writable/logs/cron.log 2>&1

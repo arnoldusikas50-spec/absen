@@ -1,0 +1,9 @@
+# Blokir eksekusi skrip di folder upload (mitigasi upload polyglot/RCE).
+# File di sini hanya boleh diakses sebagai statis.
+php_flag engine off
+RemoveHandler .php .phtml .phar
+RemoveType .php .phtml .phar
+<FilesMatch "\.(php|phtml|phar|pl|py|cgi|sh)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI -Indexes
