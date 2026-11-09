@@ -271,7 +271,7 @@ class Dataguru extends BaseController
             $input = [
                 'id_user' => $id_user,
                 'nip' => trim($nip ?? ''),
-                'nama_guru' => trim($nama_guru),
+                'nama_guru' => strtoupper(trim($nama_guru)),
                 'kode_guru' => mb_substr(trim((string) $this->request->getPost('kode_guru')), 0, 30),
                 'username' => trim($username),
                 'password' => trim($password),
@@ -401,6 +401,9 @@ class Dataguru extends BaseController
         foreach (self::EDITABLE_GURU_FIELDS as $field => $maxLen) {
             if (array_key_exists($field, $raw)) {
                 $val = trim((string) $raw[$field]);
+                if ($field === 'nama_guru') {
+                    $val = strtoupper($val);
+                }
                 if (mb_strlen($val) > $maxLen) {
                     return $this->response->setJSON(['status' => false, 'message' => "Field {$field} terlalu panjang (maks {$maxLen} karakter)"]);
                 }
@@ -1044,7 +1047,7 @@ if ($success && array_key_exists('telegram_id', $data)) {
             $seenUser[$lowUser] = $rowNo;
             if ($nip !== '') $seenNip[$nip] = $rowNo;
             $valid[] = [
-                'nama_guru' => mb_substr($nama_guru, 0, 100),
+                'nama_guru' => strtoupper(mb_substr($nama_guru, 0, 100)),
                 'nip' => $nip,
                 'kode_guru' => mb_substr($kode, 0, 30),
                 'username' => $username,

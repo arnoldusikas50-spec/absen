@@ -898,7 +898,7 @@ $todayJamKeluar = ($today && !empty($today->jam_keluar)) ? substr($today->jam_ke
         <div class="s-user-profile">
             <div class="s-greeting-text">
                 <p><?= $salam ?>,</p>
-                <h4><?= esc($firstName) ?>,</h4>
+                <h4 class="uppercase"><?= esc($firstName) ?>,</h4>
             </div>
             <div class="s-avatar-wrapper">
                 <?php if (!empty($siswa->foto_url)): ?>
@@ -914,7 +914,7 @@ $todayJamKeluar = ($today && !empty($today->jam_keluar)) ? substr($today->jam_ke
         <!-- Kotak motivasi -->
         <div class="s-motivation-box" role="status">
             <i class="bi bi-stars" aria-hidden="true"></i>
-            <span>NIS <?= esc($siswa->nis ?: '-') ?> &bull; <?= esc($siswa->nama_kelas ?: '-') ?></span>
+            <span class="uppercase">NIS <?= esc($siswa->nis ?: '-') ?> &bull; <?= esc($siswa->nama_kelas ?: '-') ?></span>
         </div>
     </div>
 
@@ -1230,8 +1230,8 @@ $todayJamKeluar = ($today && !empty($today->jam_keluar)) ? substr($today->jam_ke
             <div class="s-qr-chip">
                 <i class="bi bi-qr-code-scan"></i> Kartu Presensi Digital
             </div>
-            <h3 class="s-qr-title"><?= esc($siswa->nama ?? 'Siswa') ?></h3>
-            <p class="s-qr-meta">NIS: <?= esc($siswa->nis ?: '-') ?> &bull; Kelas <?= esc($siswa->nama_kelas ?: '-') ?></p>
+            <h3 class="s-qr-title uppercase"><?= esc($siswa->nama ?? 'Siswa') ?></h3>
+            <p class="s-qr-meta uppercase">NIS: <?= esc($siswa->nis ?: '-') ?> &bull; Kelas <?= esc($siswa->nama_kelas ?: '-') ?></p>
             <span class="s-qr-school"><?= esc($setting->sekolah ?? 'Sekolah') ?></span>
         </div>
 

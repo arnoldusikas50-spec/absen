@@ -71,7 +71,7 @@
                 </div>
                 <div class="flex-1 pl-0 md:pl-4">
                     <span class="badge-tw badge-secondary">PROFIL GURU</span>
-                    <h1 class="font-bold mb-1"><?= esc($teacher->nama_guru) ?></h1>
+                    <h1 class="font-bold mb-1 uppercase"><?= esc($teacher->nama_guru) ?></h1>
                     <p class="mb-0 opacity-75 text-xl">NIP: <?= esc($teacher->nip ?: '-') ?></p>
                     <div class="mt-6">
                         <div class="grid grid-cols-1 gap-2">

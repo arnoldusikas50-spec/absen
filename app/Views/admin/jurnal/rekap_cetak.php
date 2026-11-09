@@ -159,7 +159,7 @@ $tanggalCetak = buat_tanggal(date('d F Y'));
         ?>
         <tr>
             <td class="center"><?= $no++ ?></td>
-            <td class="bold"><?= esc($g->nama_guru) ?></td>
+            <td class="bold uppercase"><?= esc($g->nama_guru) ?></td>
             <td><?= esc($g->nip ?: '-') ?></td>
             <td class="center"><?= $terjadwal > 0 ? $terjadwal : '&mdash;' ?></td>
             <td class="center bold"><?= $totalJurnal ?></td>

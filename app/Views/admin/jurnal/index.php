@@ -492,7 +492,7 @@
                             <?= esc($inisial((string) ($b->nama_guru ?? ''))) ?>
                         </div>
                         <div class="min-w-0 flex-1">
-                            <p class="font-bold text-slate-800 text-xs m-0 leading-snug truncate" title="<?= esc($b->nama_guru ?? '') ?>">
+                            <p class="font-bold text-slate-800 text-xs m-0 leading-snug truncate uppercase" title="<?= esc($b->nama_guru ?? '') ?>">
                                 <?= esc($b->nama_guru ?? ('Guru #' . $gid)) ?>
                             </p>
                             <p class="text-[10px] font-semibold text-slate-500 m-0 mt-0.5">
@@ -623,13 +623,13 @@
                         <td class="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap tabular-nums"><?= esc(($s['dari'] ?? '-') . ' - ' . ($s['sampai'] ?? '-')) ?></td>
                         <td class="px-4 py-3">
                             <?php if ((int) ($s['id_guru'] ?? 0) > 0): ?>
-                            <a href="<?= esc($filterUrl) ?>" class="font-bold text-slate-800 hover:text-blue-700 no-underline"><?= esc($s['nama_guru'] ?? '-') ?></a>
+                            <a href="<?= esc($filterUrl) ?>" class="font-bold text-slate-800 hover:text-blue-700 no-underline uppercase"><?= esc($s['nama_guru'] ?? '-') ?></a>
                             <?php else: ?>
-                            <span class="text-slate-400 italic">Belum ditetapkan</span>
+                            <span class="text-slate-400 italic uppercase">Belum ditetapkan</span>
                             <?php endif; ?>
                         </td>
-                        <td class="px-4 py-3 font-bold text-indigo-700"><?= esc($s['nama_kelas'] ?? '-') ?></td>
-                        <td class="px-4 py-3 font-semibold text-slate-700"><?= esc($s['nama_mapel'] ?? '-') ?></td>
+                        <td class="px-4 py-3 font-bold text-indigo-700 uppercase"><?= esc($s['nama_kelas'] ?? '-') ?></td>
+                        <td class="px-4 py-3 font-semibold text-slate-700 uppercase"><?= esc($s['nama_mapel'] ?? '-') ?></td>
                         <td class="px-4 py-3">
                             <?php if ((int) ($s['id_guru'] ?? 0) <= 0): ?>
                             <a href="<?= site_url('admin/jadwal') ?>" class="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-bold no-underline">

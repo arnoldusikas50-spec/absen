@@ -192,7 +192,7 @@
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="px-5 py-3 text-center text-slate-400"><?= $no++ ?></td>
                         <td class="px-5 py-3">
-                            <p class="font-bold text-slate-800 m-0"><?= esc($g->nama_guru) ?></p>
+                            <p class="font-bold text-slate-800 m-0 uppercase"><?= esc($g->nama_guru) ?></p>
                         </td>
                         <td class="px-5 py-3 text-slate-500"><?= esc($g->nip ?: '-') ?></td>
                         <td class="px-5 py-3 text-center font-bold <?= $terjadwal > 0 ? 'text-slate-700' : 'text-slate-300' ?>">

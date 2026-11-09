@@ -133,6 +133,7 @@ curl -i "https://absensi.ikas.my.id/cron/ucapan-pagi?key=$K"
 curl -i "https://absensi.ikas.my.id/cron/ucapan-sore?key=$K"
 curl -i "https://absensi.ikas.my.id/cron/daily-recap?key=$K"
 curl -i "https://absensi.ikas.my.id/cron/rekap-piket?key=$K"
+curl -i "https://absensi.ikas.my.id/cron/apel-kesadaran?key=$K&force=1"
 curl -i "https://absensi.ikas.my.id/cron/weekly-denda?key=$K"
 curl -i "https://absensi.ikas.my.id/cron/monthly-pdf?key=$K&bulan=9&tahun=2026"
 curl -i "https://absensi.ikas.my.id/cron/semester-recap?key=$K&tahun=2026&semester=1"
@@ -238,6 +239,14 @@ CRON_KEY=<salin-dari-CRON_SECRET_KEY-di-.env-server>
 # Menandai ALPHA, surat teguran, rekap presensi, pengingat lupa checkout.
 # Menghasilkan 5 baris output sekaligus. Ini entry utama yang WAJIB ada.
 0 18 * * * curl --silent --show-error "$BASE_URL/cron/daily?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 3b. Rekap piket harian 18:30 ----------------------------------------
+30 18 * * * curl --silent --show-error "$BASE_URL/cron/rekap-piket?key=$CRON_KEY" >> "$LOG" 2>&1
+
+# --- 3c. Pengingat Apel Kesadaran KORPRI, tgl 16 jam 19:00 ---------------
+# Mengingatkan pelaksanaan Apel Kesadaran KORPRI besok pagi (tgl 17 jam 07.15 WITA).
+# Otomatis idempoten per bulan; gunakan &force=1 untuk pengujian manual.
+0 19 16 * * curl --silent --show-error "$BASE_URL/cron/apel-kesadaran?key=$CRON_KEY" >> "$LOG" 2>&1
 
 # --- 4. Rekap denda mingguan, Sabtu 18:05 --------------------------------
 # Dijadwalkan 18:05 (bukan 18:00) supaya selesai setelah proses harian #3.

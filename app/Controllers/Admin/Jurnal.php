@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\DashboardModel;
 use App\Models\ElearningModel;
 use App\Models\JurnalGuruModel;
+use App\Models\PiketModel;
 use App\Services\AttendancePolicy;
 use App\Services\WajibJurnalPulangService;
 
@@ -14,6 +15,7 @@ class Jurnal extends BaseController
     protected $dashboardModel;
     protected $elearningModel;
     protected $jurnalModel;
+    protected $piketModel;
 
     public function __construct()
     {
@@ -21,6 +23,7 @@ class Jurnal extends BaseController
         $this->elearningModel = new ElearningModel();
         $this->jurnalModel = new JurnalGuruModel();
         $this->jurnalModel->initialize();
+        $this->piketModel = new PiketModel();
     }
 
     /** Admin, panitia/pengawas, dan kepala sekolah boleh memantau jurnal. */
@@ -913,6 +916,13 @@ class Jurnal extends BaseController
         $kolomValidasi = $this->adaKolomValidasi();
         $statusValidasi = $kolomValidasi ? $this->normalisasiValidasi($jurnal->validasi_status ?? '') : '';
 
+        // Parse siswa_absent (JSON ID siswa) menjadi daftar nama untuk ditampilkan
+        $absensi = $this->piketModel->parseSiswaAbsent($jurnal->siswa_absent ?? null);
+        $siswaAbsentNama = $absensi['nama'];
+        if (!empty($absensi['ids'])) {
+            $siswaAbsentNama = $this->piketModel->getSiswaNamesByIds($absensi['ids']);
+        }
+
         return view('admin/jurnal/detail', [
             'title' => 'Detail Jurnal Mengajar',
             'judul' => 'Detail Jurnal Mengajar',
@@ -931,6 +941,8 @@ class Jurnal extends BaseController
                 ? (json_decode($jurnal->profil_pancasila, true) ?: [])
                 : [],
             'can_print' => $this->isAdmin() || $this->isKepsek(),
+            'siswa_absent_nama' => $siswaAbsentNama,
+            'siswa_absent_count' => count($siswaAbsentNama),
         ]);
     }
 

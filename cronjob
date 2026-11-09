@@ -40,6 +40,9 @@ CRON_KEY=9a60309b14be260788f29259cb8ed49b4391b47fe9ad0215885e555d
 # --- 3b. Rekap piket harian 18:30 (30 menit setelah proses harian) ---------
 30 18 * * * curl --silent --show-error "$BASE_URL/cron/rekap-piket?key=$CRON_KEY" >> "$LOG" 2>&1
 
+# --- 3c. Pengingat Apel Kesadaran KORPRI, tgl 16 jam 19:00 ------------------
+0 19 16 * * curl --silent --show-error "$BASE_URL/cron/apel-kesadaran?key=$CRON_KEY" >> "$LOG" 2>&1
+
 # --- 4. Rekap denda mingguan, Sabtu 18:05 ----------------------------------
 5 18 * * 6 curl --silent --show-error "$BASE_URL/cron/weekly-denda?key=$CRON_KEY" >> "$LOG" 2>&1
 

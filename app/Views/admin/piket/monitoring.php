@@ -159,7 +159,7 @@
                                                     <?= esc($k->jenis ?? '-') ?>
                                                 </span>
                                             </td>
-                                            <td class="font-semibold text-slate-800"><?= esc($k->nama_siswa ?? '—') ?></td>
+                                            <td class="font-semibold text-slate-800 uppercase"><?= esc($k->nama_siswa ?? '—') ?></td>
                                             <td class="text-slate-500"><?= esc($k->keterangan ?? '—') ?></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -287,10 +287,10 @@
                                                 <?= esc($j->jam_ke ?? '—') ?>
                                             </span>
                                         </td>
-                                        <td class="font-semibold text-slate-800"><?= esc($j->nama_guru ?? '—') ?></td>
+                                        <td class="font-semibold text-slate-800 uppercase"><?= esc($j->nama_guru ?? '—') ?></td>
                                         <td>
-                                            <div class="font-semibold text-slate-700"><?= esc($j->nama_kelas ?? '—') ?></div>
-                                            <div class="text-[11px] text-slate-400"><?= esc($j->nama_mapel ?? '—') ?></div>
+                                            <div class="font-semibold text-slate-700 uppercase"><?= esc($j->nama_kelas ?? '—') ?></div>
+                                            <div class="text-[11px] text-slate-400 uppercase"><?= esc($j->nama_mapel ?? '—') ?></div>
                                         </td>
                                         <td class="text-center">
                                             <a href="<?= site_url('admin/jurnal/detail/' . (int) $j->id_jurnal) ?>" target="_blank"
@@ -369,7 +369,7 @@
                                     }
                                 ?>
                                     <tr>
-                                        <td class="font-semibold text-slate-800"><?= esc($g->nama_guru ?? '—') ?></td>
+                                        <td class="font-semibold text-slate-800 uppercase"><?= esc($g->nama_guru ?? '—') ?></td>
                                         <td class="text-center font-mono text-xs"><?= esc($jamMasukFmt) ?></td>
                                         <td class="text-center font-mono text-xs"><?= esc($jamPulangFmt) ?></td>
                                         <td class="text-center">

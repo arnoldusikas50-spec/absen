@@ -88,6 +88,13 @@ $totalKelas = count($kelas ?? []);
                     <button id="edit-jadwal" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-xs shadow-blue-500/20" data-ui-toggle="modal" data-ui-target="#createJadwalModal">
                         <i class="bi bi-gear-fill"></i> Set Jadwal
                     </button>
+                    <a href="<?= site_url('jadwal/export-template') ?>" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors shadow-xs no-underline">
+                        <i class="bi bi-file-earmark-excel"></i> Template Excel
+                    </a>
+                    <button type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors shadow-xs" onclick="document.getElementById('importJadwalFile').click()">
+                        <i class="bi bi-file-earmark-arrow-up"></i> Import Excel
+                    </button>
+                    <input type="file" id="importJadwalFile" accept=".xml,.csv,.xls" class="hidden" onchange="importJadwal(this)">
                 <?php endif; ?>
             </div>
         </div>
@@ -1314,6 +1321,58 @@ $totalKelas = count($kelas ?? []);
                         Swal.fire("Error", "Gagal menghubungi server", "error");
                     }
                 });
+            }
+        });
+    }
+
+    function importJadwal(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('jadwal_file', file);
+        formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
+        Swal.fire({
+            title: "Mengimpor Jadwal...",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        $.ajax({
+            url: '<?= base_url('jadwal/import') ?>',
+            type: "POST",
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            success: function (data) {
+                input.value = '';
+                if (data.status) {
+                    let msg = data.message;
+                    if (data.errors && data.errors.length > 0) {
+                        msg += '\n\nPeringatan:\n' + data.errors.slice(0, 5).map(e => '• Baris ' + e.baris + ': ' + e.pesan).join('\n');
+                        if (data.errors.length > 5) msg += '\n... dan ' + (data.errors.length - 5) + ' baris lainnya';
+                    }
+                    Swal.fire({
+                        icon: "success",
+                        title: "Sukses Impor",
+                        text: msg,
+                        timer: 3000,
+                        showConfirmButton: false
+                    }).then(() => reload());
+                } else {
+                    let msg = data.message || 'Gagal mengimpor jadwal';
+                    if (data.errors && data.errors.length > 0) {
+                        msg += '\n\nDetail:\n' + data.errors.slice(0, 5).map(e => '• Baris ' + e.baris + ': ' + e.pesan).join('\n');
+                        if (data.errors.length > 5) msg += '\n... dan ' + (data.errors.length - 5) + ' baris lainnya';
+                    }
+                    Swal.fire("Gagal", msg, "error");
+                }
+            },
+            error: function () {
+                input.value = '';
+                Swal.fire("Error", "Gagal menghubungi server", "error");
             }
         });
     }

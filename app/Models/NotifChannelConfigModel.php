@@ -91,6 +91,8 @@ class NotifChannelConfigModel extends Model
         // Wajib ada di daftar ini supaya admin bisa mematikan kanalnya di
         // Pengaturan Notifikasi (tanpa barisnya, isEnabled() fail-open).
         'rekap_piket'     => ['label' => 'Rekap Piket Harian (tombol kirim)', 'personal' => false, 'pref_key' => ''],
+        // Pengingat Apel Kesadaran KORPRI tgl 17 setiap bulan (dikirim tgl 16 jam 19:00 WITA)
+        'apel_kesadaran'  => ['label' => 'Pengingat Apel Kesadaran KORPRI (Tgl 16, Cron)', 'personal' => false, 'pref_key' => ''],
     ];
 
     // ── Cache in-request ──────────────────────────────────────────────

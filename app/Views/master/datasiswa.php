@@ -210,7 +210,7 @@
             ajax: '<?= site_url('datasiswa/data') ?>',
             columns: [
                 { data: 'no' },
-                { data: 'nama' },
+                { data: 'nama', className: 'uppercase' },
                 { data: 'nis' },
                 { data: 'nisn' },
                 { data: 'kelas' },

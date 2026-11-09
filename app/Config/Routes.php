@@ -194,6 +194,8 @@ $routes->group('admin', ['filter' => 'auth'], function ($routes) {
     $routes->post('jadwal/delete-jadwal',        'Admin\Jadwal::delete_jadwal');
     $routes->post('jadwal/reformat',             'Admin\Jadwal::reformat_jadwal');
     $routes->post('jadwal/copy',                 'Admin\Jadwal::copy_jadwal');
+    $routes->get('jadwal/export-template',       'Admin\Jadwal::export_template_jadwal');
+    $routes->post('jadwal/import',               'Admin\Jadwal::import_jadwal');
 
     // Piket
     $routes->get('piket',                        'Admin\Piket::index');
@@ -792,6 +794,7 @@ $routes->get('cron/weekly-denda', 'CronController::weeklyDendaRecap');
 $routes->get('cron/monthly-pdf', 'CronController::monthlyPdf');
 $routes->get('cron/ucapan-pagi', 'CronController::ucapanPagi');
 $routes->get('cron/ucapan-sore', 'CronController::ucapanSore');
+$routes->get('cron/apel-kesadaran', 'CronController::apelKesadaran');
 
 $routes->group('admin', ['filter' => 'auth'], function ($routes) {
     // Jadwal Pelajaran (E-Learning)

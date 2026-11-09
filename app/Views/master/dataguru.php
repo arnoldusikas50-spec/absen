@@ -189,7 +189,7 @@
                     ajax: '<?= site_url('dataguru/data') ?>',
                     columns: [
                         { data: 'no', className: 'text-center' },
-                        { data: 'nama_guru' },
+                        { data: 'nama_guru', className: 'uppercase' },
                         { data: 'nip' },
                         { data: 'nuptk' },
                         { data: 'email' },

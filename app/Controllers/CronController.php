@@ -2496,6 +2496,80 @@ class CronController extends BaseController
     }
 
     /**
+     * Pengingat Apel Kesadaran KORPRI tanggal 17 setiap bulan.
+     * Dijadwalkan tanggal 16 pukul 19:00 WITA.
+     * GET /cron/apel-kesadaran?key=...
+     * Opsional: &force=1 untuk pengujian atau pengiriman ulang.
+     */
+    public function apelKesadaran()
+    {
+        if (!$this->validateKey()) {
+            return $this->response->setStatusCode(403)->setBody('Invalid key');
+        }
+
+        $tanggal = date('Y-m-d');
+        $tglHariIni = (int) date('j', strtotime($tanggal));
+
+        // Hanya dikirim pada tanggal 16 (kecuali dengan ?force=1 untuk pengujian manual)
+        if ($tglHariIni !== 16 && !$this->dimintaForce()) {
+            return $this->response->setBody(
+                'Pengingat Apel Kesadaran hanya dijalankan pada tanggal 16 setiap bulan (hari ini tanggal ' . $tglHariIni . '). Gunakan ?force=1 untuk pengujian.'
+            );
+        }
+
+        // Tentukan tanggal 17 untuk teks pesan (besok atau bulan ini bila force)
+        $tsBesok = strtotime('+1 day', strtotime($tanggal));
+        if ($tglHariIni !== 16 && $this->dimintaForce()) {
+            $tsBesok = strtotime(date('Y-m-17'));
+        }
+
+        $bulanNum = (int) date('n', $tsBesok);
+        $tahun    = date('Y', $tsBesok);
+        $namaBulan = $this->namaBulanIndonesia($bulanNum);
+        $tgl17Text = '17 ' . $namaBulan . ' ' . $tahun;
+        $kunciPeriode = 'apel_kesadaran_' . date('Y-m', $tsBesok);
+
+        if ($skip = $this->grupDinonaktifkan('apel_kesadaran', 'Pengingat Apel Kesadaran')) {
+            return $this->response->setBody($skip);
+        }
+
+        if (!$this->dimintaForce() && $this->notifikasiCronTerkirim('apel_kesadaran', $kunciPeriode)) {
+            return $this->response->setBody(
+                'Pengingat Apel Kesadaran KORPRI untuk ' . $tgl17Text
+                . ' sudah terkirim sebelumnya, dilewati. Gunakan ?force=1 untuk mengirim ulang.'
+            );
+        }
+
+        $info = [
+            'tanggal_17' => $tgl17Text,
+            'jam'        => '07.15 WITA',
+        ];
+
+        try {
+            $sent = $this->notification->notifyApelKesadaran($info);
+        } catch (\Throwable $e) {
+            $this->logCronFailure('Apel kesadaran', $e->getMessage());
+            $this->catatNotifikasiCron('apel_kesadaran', $kunciPeriode, false, $e->getMessage());
+
+            return $this->response->setStatusCode(500)->setBody('Pengingat Apel Kesadaran GAGAL: ' . $e->getMessage());
+        }
+
+        if ($sent !== true) {
+            $reason = $this->notification->lastError !== ''
+                ? $this->notification->lastError
+                : 'Kanal Telegram/WhatsApp grup tidak menerima pesan.';
+            $this->logCronFailure('Apel kesadaran', $reason);
+            $this->catatNotifikasiCron('apel_kesadaran', $kunciPeriode, false, $reason);
+
+            return $this->response->setStatusCode(500)->setBody('Pengingat Apel Kesadaran GAGAL: ' . $reason);
+        }
+
+        $this->catatNotifikasiCron('apel_kesadaran', $kunciPeriode, true);
+
+        return $this->response->setBody('Pengingat Apel Kesadaran KORPRI terkirim — ' . $tgl17Text);
+    }
+
+    /**
      * Jam masuk efektif pada tanggal tertentu (dari jadwal per hari, atau
      * jam_masuk bawaan bila jadwal tidak ada).
      */

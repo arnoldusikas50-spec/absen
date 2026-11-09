@@ -1826,6 +1826,25 @@ class NotificationService
     }
 
     /**
+     * Pengingat Apel Kesadaran KORPRI setiap tanggal 17.
+     * Dikirim ke grup pada tanggal 16 pukul 19:00 WITA.
+     *
+     * @param array $info ['tanggal_17' => '17 November 2026', 'jam' => '07.15 WITA']
+     * @return bool true bila pesan berhasil diterima minimal salah satu kanal grup yang aktif
+     */
+    public function notifyApelKesadaran(array $info): bool
+    {
+        $tgl17 = trim((string) ($info['tanggal_17'] ?? '17'));
+        $jam   = trim((string) ($info['jam'] ?? '07.15 WITA'));
+
+        $msg = "🇮🇩 <b>INFO : Bpk/Ibu Guru</b>,\n"
+             . "Apel Kesadaran KORPRI besok pagi, tanggal " . $this->plain($tgl17) . " dilaksanakan " . $this->plain($jam) . ".\n\n"
+             . "Mohon kehadiran tepat waktu dengan mengenakan seragam KORPRI lengkap. Terima kasih. 🙏";
+
+        return $this->notifyGrup('apel_kesadaran', $msg);
+    }
+
+    /**
      * Rekap kehadiran harian. Dikirim cron jam 18:00.
      *
      * @return bool true bila Telegram menerimanya

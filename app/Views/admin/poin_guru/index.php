@@ -276,7 +276,7 @@
                                             <div class="initials-avatar mr-3"><?= $initials ?></div>
                                         <?php endif; ?>
                                         <div>
-                                            <h6 class="font-bold mb-0"><?= esc($guru->nama_guru) ?></h6>
+                                            <h6 class="font-bold mb-0 uppercase"><?= esc($guru->nama_guru) ?></h6>
                                             <span class="text-slate-400 text-sm uppercase">Guru Tetap</span>
                                         </div>
                                     </div>

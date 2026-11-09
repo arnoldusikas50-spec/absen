@@ -321,7 +321,7 @@ class Datasiswa extends BaseController
         $nis = trim((string) $this->request->getPost('nis'));
         $jk = strtoupper(trim((string) $this->request->getPost('jenis_kelamin')));
         $insert = [
-            "nama" => $nama_siswa,
+            "nama" => strtoupper($nama_siswa),
             "nis" => $nis,
             "nisn" => trim((string) $this->request->getPost('nisn')),
             "jenis_kelamin" => in_array($jk, ['L', 'P'], true) ? $jk : null,
@@ -556,6 +556,9 @@ class Datasiswa extends BaseController
         foreach (self::UPDATEABLE_SISWA_FIELDS as $field => $maxLen) {
             if (array_key_exists($field, $raw)) {
                 $val = trim((string) $raw[$field]);
+                if ($field === 'nama') {
+                    $val = strtoupper($val);
+                }
                 if (mb_strlen($val) > $maxLen) {
                     return $this->response->setJSON(['insert' => false, 'text' => "Field {$field} terlalu panjang (maks {$maxLen})"]);
                 }
@@ -936,7 +939,7 @@ class Datasiswa extends BaseController
             
             $clean[] = [
                 'uid' => bin2hex(random_bytes(16)),
-                'nama' => $nama,
+                'nama' => strtoupper($nama),
                 'nis' => $nis,
                 'nisn' => $nisn !== '' ? $nisn : null,
                 'jenis_kelamin' => in_array($jk, ['L', 'P'], true) ? $jk : null,

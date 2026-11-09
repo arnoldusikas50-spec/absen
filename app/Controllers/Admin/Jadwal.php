@@ -1332,4 +1332,493 @@ class Jadwal extends BaseController
         return strtoupper(str_replace([' ', '-', '/'], '', $str));
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // EXPORT TEMPLATE EXCEL JADWAL PELAJARAN
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Export template Excel (XML Spreadsheet 2003) untuk import jadwal pelajaran.
+     * File bisa dibuka langsung oleh Microsoft Excel tanpa library eksternal.
+     */
+    public function export_template_jadwal()
+    {
+        if (!$this->isAdmin()) {
+            return redirect()->to('auth')->with('error', 'Akses ditolak');
+        }
+
+        $tpSmt = $this->getTpSmt();
+        $tp = $tpSmt->tp;
+        $smt = $tpSmt->smt;
+
+        if (!$tp || !$smt) {
+            return redirect()->back()->with('error', 'Tahun pelajaran/semester aktif belum diset');
+        }
+
+        $kelas   = $this->elearningModel->getAllKelas($tp->id_tp, $smt->id_smt);
+        $mapels  = $this->elearningModel->getMapelArray();
+        $gurus   = $this->elearningModel->getAllGuru();
+
+        $arrHari = ['1' => 'Senin', '2' => 'Selasa', '3' => 'Rabu', '4' => 'Kamis', '5' => 'Jumat', '6' => 'Sabtu'];
+
+        // --- Build XML Spreadsheet 2003 ---
+        $xml = '<?xml version="1.0"?>' . "\n";
+        $xml .= '<?mso-application progid="Excel.Sheet"?>' . "\n";
+        $xml .= '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' .
+            'xmlns:o="urn:schemas-microsoft-com:office:office" ' .
+            'xmlns:x="urn:schemas-microsoft-com:office:excel" ' .
+            'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" ' .
+            'xmlns:html="http://www.w3.org/TR/REC-html40">' . "\n";
+
+        // Styles
+        $xml .= '<Styles>' . "\n";
+        $xml .= '<Style ss:ID="Header" ss:Name="Header">' . "\n";
+        $xml .= '<Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="11"/>' . "\n";
+        $xml .= '<Interior ss:Color="#4338CA" ss:Pattern="Solid"/>' . "\n";
+        $xml .= '<Alignment ss:Horizontal="Center" ss:Vertical="Center"/>' . "\n";
+        $xml .= '</Style>' . "\n";
+        $xml .= '<Style ss:ID="Body">' . "\n";
+        $xml .= '<Font ss:Size="11"/>' . "\n";
+        $xml .= '<Alignment ss:Vertical="Center"/>' . "\n";
+        $xml .= '</Style>' . "\n";
+        $xml .= '<Style ss:ID="Example" ss:Parent="Body">' . "\n";
+        $xml .= '<Font ss:Color="#666666"/>' . "\n";
+        $xml .= '<Interior ss:Color="#FFF7E6" ss:Pattern="Solid"/>' . "\n";
+        $xml .= '</Style>' . "\n";
+        $xml .= '</Styles>' . "\n";
+
+        // Worksheet 1: Template
+        $xml .= '<Worksheet ss:Name="Template Import Jadwal">' . "\n";
+        $xml .= '<Table ss:ExpandedColumnCount="7" ss:ExpandedRowCount="20" x:FullColumns="1" x:FullRows="1">' . "\n";
+
+        // Header row
+        $headers = ['Kode Kelas', 'Nama Kelas', 'Hari', 'Mata Pelajaran', 'Kode Guru', 'Jam Mulai', 'Jam Selesai'];
+        $xml .= '<Row ss:AutoFitHeight="0">' . "\n";
+        foreach ($headers as $h) {
+            $xml .= '<Cell ss:StyleID="Header"><Data ss:Type="String">' . htmlspecialchars($h) . '</Data></Cell>' . "\n";
+        }
+        $xml .= '</Row>' . "\n";
+
+        // Example rows
+        $contohDitambahkan = false;
+        foreach ($kelas as $k) {
+            if ($contohDitambahkan) break;
+            foreach (array_slice($arrHari, 0, 2, true) as $idHari => $namaHari) {
+                if ($contohDitambahkan) break;
+                foreach (array_slice($mapels, 0, 1, true) as $idMapel => $namaMapel) {
+                    foreach ($gurus as $g) {
+                        $xml .= '<Row ss:AutoFitHeight="0">' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($k->kode_kelas ?? '') . '</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($k->nama_kelas ?? '') . '</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($namaHari) . '</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($namaMapel) . '</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($g->kode_guru ?? '') . '</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">07:00</Data></Cell>' . "\n";
+                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">07:45</Data></Cell>' . "\n";
+                        $xml .= '</Row>' . "\n";
+                        $contohDitambahkan = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $xml .= '</Table>' . "\n";
+        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
+        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
+        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
+        $xml .= '</WorksheetOptions>' . "\n";
+        $xml .= '</Worksheet>' . "\n";
+
+        // Worksheet 2: Data Referensi (Kelas)
+        $xml .= '<Worksheet ss:Name="Data Kelas">' . "\n";
+        $xml .= '<Table ss:ExpandedColumnCount="2" ss:ExpandedRowCount="' . (count($kelas) + 2) . '" x:FullColumns="1">' . "\n";
+        $xml .= '<Row><Cell ss:StyleID="Header"><Data ss:Type="String">Kode Kelas</Data></Cell>' .
+            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Kelas</Data></Cell></Row>' . "\n";
+        foreach ($kelas as $k) {
+            $xml .= '<Row>' .
+                '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($k->kode_kelas ?? '') . '</Data></Cell>' .
+                '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($k->nama_kelas ?? '') . '</Data></Cell>' .
+                '</Row>' . "\n";
+        }
+        $xml .= '</Table>' . "\n";
+        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
+        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
+        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
+        $xml .= '</WorksheetOptions>' . "\n";
+        $xml .= '</Worksheet>' . "\n";
+
+        // Worksheet 3: Data Referensi (Mapel & Guru)
+        $xml .= '<Worksheet ss:Name="Data Mapel & Guru">' . "\n";
+        $xml .= '<Table ss:ExpandedColumnCount="4" ss:ExpandedRowCount="' . (max(count($mapels), count($gurus)) + 2) . '" x:FullColumns="1">' . "\n";
+        $xml .= '<Row>' .
+            '<Cell ss:StyleID="Header"><Data ss:Type="String">Kode Mapel</Data></Cell>' .
+            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Mapel</Data></Cell>' .
+            '<Cell ss:StyleID="Header"><Data ss:Type="String">Kode Guru</Data></Cell>' .
+            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Guru</Data></Cell>' .
+            '</Row>' . "\n";
+        $mapelArr = array_values($mapels);
+        $guruArr  = array_values($gurus);
+        $maxRow   = max(count($mapelArr), count($guruArr));
+        for ($i = 0; $i < $maxRow; $i++) {
+            $xml .= '<Row>';
+            if (isset($mapelArr[$i])) {
+                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($mapelArr[$i]->id_mapel ?? '') . '</Data></Cell>' .
+                    '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($mapelArr[$i]->nama_mapel ?? '') . '</Data></Cell>';
+            } else {
+                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>' .
+                    '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>';
+            }
+            if (isset($guruArr[$i])) {
+                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($guruArr[$i]->kode_guru ?? '') . '</Data></Cell>' .
+                    '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($guruArr[$i]->nama_guru ?? '') . '</Data></Cell>';
+            } else {
+                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>' .
+                    '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>';
+            }
+            $xml .= '</Row>' . "\n";
+        }
+        $xml .= '</Table>' . "\n";
+        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
+        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
+        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
+        $xml .= '</WorksheetOptions>' . "\n";
+        $xml .= '</Worksheet>' . "\n";
+
+        $xml .= '</Workbook>' . "\n";
+
+        $filename = 'template_jadwal_' . ($tp->tahun ?? 'tp') . '_smt' . ($smt->smt ?? '0') . '.xml';
+
+        return $this->response
+            ->setContentType('application/vnd.ms-excel')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setHeader('Cache-Control', 'no-cache, must-revalidate')
+            ->setBody($xml);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // IMPORT EXCEL JADWAL PELAJARAN
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Import jadwal dari file Excel XML Spreadsheet 2003 atau CSV.
+     */
+    public function import_jadwal()
+    {
+        if (!$this->isAdmin()) {
+            return $this->response->setJSON(['status' => false, 'message' => 'Akses ditolak']);
+        }
+
+        $tpSmt = $this->getTpSmt();
+        $tp = $tpSmt->tp;
+        $smt = $tpSmt->smt;
+
+        if (!$tp || !$smt) {
+            return $this->response->setJSON(['status' => false, 'message' => 'Tahun pelajaran/semester aktif belum diset']);
+        }
+        $tpId = (int) $tp->id_tp;
+        $smtId = (int) $smt->id_smt;
+
+        $file = $this->request->getFile('jadwal_file');
+        if (!$file || !$file->isValid() || $file->hasMoved()) {
+            return $this->response->setJSON(['status' => false, 'message' => 'File tidak valid atau tidak diunggah']);
+        }
+
+        $ext = strtolower($file->getClientExtension());
+        if (!in_array($ext, ['xml', 'csv', 'xls'], true)) {
+            return $this->response->setJSON(['status' => false, 'message' => 'Format file tidak didukung. Gunakan .xml (template Excel), .csv atau .xls']);
+        }
+
+        $content = file_get_contents($file->getTempName());
+        if ($content === false) {
+            return $this->response->setJSON(['status' => false, 'message' => 'Gagal membaca file']);
+        }
+
+        $rows = [];
+        if ($ext === 'csv') {
+            $rows = $this->parseCsvImport($content);
+        } else {
+            $rows = $this->parseXmlImport($content);
+        }
+
+        if (empty($rows)) {
+            return $this->response->setJSON(['status' => false, 'message' => 'Tidak ada data valid yang ditemukan dalam file']);
+        }
+
+        // Lookup maps
+        $kelasMap = [];  // kode_kelas => id_kelas
+        foreach ($this->elearningModel->getAllKelas($tpId, $smtId) as $k) {
+            $kelasMap[strtoupper(trim($k->kode_kelas ?? ''))] = (int) $k->id_kelas;
+            $kelasMap[strtoupper(trim($k->nama_kelas ?? ''))] = (int) $k->id_kelas;
+        }
+
+        $mapelMap = []; // nama_mapel => id_mapel
+        foreach ($this->elearningModel->getMapelArray() as $id => $nama) {
+            $mapelMap[strtoupper(trim($nama))] = (int) $id;
+        }
+
+        $guruMap = []; // kode_guru => id_guru
+        foreach ($this->elearningModel->getAllGuru() as $g) {
+            $guruMap[strtoupper(trim($g->kode_guru ?? ''))] = (int) $g->id_guru;
+            $guruMap[strtoupper(trim($g->nama_guru ?? ''))] = (int) $g->id_guru;
+        }
+
+        $hariMap = [
+            'SENIN' => 1, 'SELASA' => 2, 'RABU' => 3, 'KAMIS' => 4,
+            'JUMAT' => 5, 'SABTU' => 6, 'MINGGU' => 7,
+            '1' => 1, '2' => 2, '3' => 3, '4' => 4, '5' => 5, '6' => 6, '7' => 7,
+        ];
+
+        $db = \Config\Database::connect();
+        $insert = [];
+        $errorRows = [];
+        $success = 0;
+        $lineNo = 1;
+
+        foreach ($rows as $r) {
+            $lineNo++;
+            // Skip baris kosong atau baris header
+            if (empty(array_filter($r))) continue;
+
+            $kodeKelas   = strtoupper(trim($r[0] ?? ''));
+            $namaKelas   = strtoupper(trim($r[1] ?? ''));
+            $hari        = strtoupper(trim($r[2] ?? ''));
+            $namaMapel   = strtoupper(trim($r[3] ?? ''));
+            $kodeGuru    = strtoupper(trim($r[4] ?? ''));
+            $jamMulai    = trim($r[5] ?? '');
+            $jamSelesai  = trim($r[6] ?? '');
+
+            // Validasi kolom wajib
+            if ($kodeKelas === '' && $namaKelas === '') {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Kelas kosong'];
+                continue;
+            }
+            if ($hari === '') {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Hari kosong'];
+                continue;
+            }
+            if ($namaMapel === '') {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Mata pelajaran kosong'];
+                continue;
+            }
+            if ($jamMulai === '' || $jamSelesai === '') {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Jam masuk/keluar kosong'];
+                continue;
+            }
+
+            // Resolve ID kelas
+            $idKelas = $kelasMap[$kodeKelas] ?? $kelasMap[$namaKelas] ?? null;
+            if (!$idKelas) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Kelas tidak ditemukan: ' . ($kodeKelas ?: $namaKelas)];
+                continue;
+            }
+
+            // Resolve ID mapel
+            $idMapel = $mapelMap[$namaMapel] ?? null;
+            if (!$idMapel) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Mata pelajaran tidak ditemukan: ' . $namaMapel];
+                continue;
+            }
+
+            // Resolve ID guru (opsional)
+            $idGuru = $guruMap[$kodeGuru] ?? null;
+            if ($kodeGuru !== '' && !$idGuru) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Guru tidak ditemukan: ' . $kodeGuru];
+                continue;
+            }
+
+            // Resolve hari
+            $idHari = $hariMap[$hari] ?? null;
+            if (!$idHari || $idHari < 1 || $idHari > 7) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Hari tidak valid: ' . $hari];
+                continue;
+            }
+
+            // Validasi waktu
+            if (!preg_match('/^(\d{1,2}):(\d{2})$/', $jamMulai, $m1) ||
+                !preg_match('/^(\d{1,2}):(\d{2})$/', $jamSelesai, $m2)) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Format jam tidak valid (HH:MM)'];
+                continue;
+            }
+            $jamMulaiNorm  = sprintf('%02d:%02d', (int)$m1[1], (int)$m1[2]);
+            $jamSelesaiNorm = sprintf('%02d:%02d', (int)$m2[1], (int)$m2[2]);
+            if ($jamMulaiNorm >= $jamSelesaiNorm) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Jam mulai harus lebih awal dari jam selesai'];
+                continue;
+            }
+
+            // Cek bentrok kelas pada hari yang sama
+            $conflict = $db->table('kelas_jadwal_mapel')
+                ->where('id_tp', $tpId)
+                ->where('id_smt', $smtId)
+                ->where('id_kelas', $idKelas)
+                ->where('id_hari', $idHari)
+                ->where('id_mapel !=', 0)
+                ->where('dari <', $jamSelesaiNorm)
+                ->where('sampai >', $jamMulaiNorm)
+                ->get()->getRow();
+            if ($conflict) {
+                $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Bentrok jadwal kelas pada ' . substr($conflict->dari, 0, 5) . '-' . substr($conflict->sampai, 0, 5)];
+                continue;
+            }
+
+            // Cek bentrok guru
+            if ($idGuru > 0) {
+                $teacherConflict = $db->table('kelas_jadwal_mapel jm')
+                    ->select('jm.id_jadwal, jm.id_kelas, jm.id_mapel, jm.dari, jm.sampai')
+                    ->where('jm.id_tp', $tpId)
+                    ->where('jm.id_smt', $smtId)
+                    ->where('jm.id_hari', $idHari)
+                    ->where('jm.id_mapel >', 0)
+                    ->where('jm.dari <', $jamSelesaiNorm)
+                    ->where('jm.sampai >', $jamMulaiNorm)
+                    ->get()->getResult();
+
+                foreach ($teacherConflict as $tc) {
+                    $pairKey = (int)$tc->id_kelas . ':' . (int)$tc->id_mapel;
+                    // Cek apakah guru ini mengajar kelas:mapel tersebut
+                    $guruPair = $db->table('jabatan_guru')
+                        ->where('id_tp', $tpId)
+                        ->where('id_smt', $smtId)
+                        ->get()->getResult();
+                    $mengajar = false;
+                    foreach ($guruPair as $gp) {
+                        $mapels = $this->elearningModel->decodeMapelKelasAssignments($gp->mapel_kelas);
+                        foreach ($mapels as $m) {
+                            if ((int)($m['id_mapel'] ?? 0) === (int)$tc->id_mapel) {
+                                foreach (($m['kelas_mapel'] ?? []) as $km) {
+                                    if ((int)($km['kelas'] ?? 0) === (int)$tc->id_kelas) {
+                                        $mengajar = true;
+                                        break;
+                                    }
+                                }
+                                if ($mengajar) break;
+                            }
+                        }
+                        if ($mengajar) break;
+                    }
+                    if ($mengajar) {
+                        $errorRows[] = ['baris' => $lineNo, 'pesan' => 'Bentrok guru: sudah mengajar kelas lain pada jam tersebut'];
+                        continue 2;
+                    }
+                }
+            }
+
+            $insert[] = [
+                'id_tp'      => $tpId,
+                'id_smt'     => $smtId,
+                'id_kelas'   => $idKelas,
+                'id_hari'    => $idHari,
+                'id_mapel'   => $idMapel,
+                'dari'       => $jamMulaiNorm,
+                'sampai'     => $jamSelesaiNorm,
+                'jam_ke'     => 0,
+            ];
+            $success++;
+        }
+
+        if (empty($insert) && !empty($errorRows)) {
+            return $this->response->setJSON([
+                'status' => false,
+                'message' => 'Semua baris gagal diimpor',
+                'errors' => $errorRows,
+            ]);
+        }
+
+        $db->transBegin();
+        try {
+            if (!empty($insert)) {
+                $db->table('kelas_jadwal_mapel')->insertBatch($insert);
+            }
+            if ($db->transStatus() === false) {
+                $db->transRollback();
+                return $this->response->setJSON(['status' => false, 'message' => 'Gagal menyimpan ke database']);
+            }
+            $db->transCommit();
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            log_message('error', '[import_jadwal] ' . $e->getMessage());
+            return $this->response->setJSON(['status' => false, 'message' => 'Gagal mengimpor jadwal']);
+        }
+
+        // Reindex jam_ke untuk semua kelas yang terpengaruh
+        $touchedKelas = array_unique(array_column($insert, 'id_kelas'));
+        $touchedHari  = array_unique(array_column($insert, 'id_hari'));
+        foreach ($touchedKelas as $k) {
+            foreach ($touchedHari as $h) {
+                $this->reindexJamKe($tpId, $smtId, (int)$k, (int)$h);
+            }
+        }
+
+        // Sync penugasan guru (kelas:mapel) ke jabatan_guru
+        foreach ($insert as $row) {
+            if ((int) $row['id_mapel'] > 0 && $idGuru > 0) {
+                $this->assignTeacherPair($tpId, $smtId, (int) $idGuru, (int) $row['id_kelas'], (int) $row['id_mapel']);
+            }
+        }
+
+        $pesan = 'Berhasil mengimpor ' . $success . ' jadwal pelajaran';
+        if (!empty($errorRows)) {
+            $pesan .= ' (' . count($errorRows) . ' baris gagal)';
+        }
+
+        return $this->response->setJSON([
+            'status' => true,
+            'message' => $pesan,
+            'inserted' => $success,
+            'errors' => $errorRows,
+        ]);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PARSING HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Parse CSV content to array of rows.
+     */
+    private function parseCsvImport(string $content): array
+    {
+        $rows = [];
+        $lines = explode("\n", $content);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            $rows[] = str_getcsv($line);
+        }
+        return $rows;
+    }
+
+    /**
+     * Parse Excel XML Spreadsheet 2003 content to array of rows.
+     */
+    private function parseXmlImport(string $content): array
+    {
+        $rows = [];
+        $xml = @simplexml_load_string($content);
+        if ($xml === false) {
+            return $rows;
+        }
+
+        $ns = $xml->getNamespaces(true);
+        $ss = $xml->children($ns['ss'] ?? 'urn:schemas-microsoft-com:office:spreadsheet');
+
+        foreach ($ss->Worksheet as $worksheet) {
+            $table = $worksheet->Table;
+            if (!$table) continue;
+
+            foreach ($table->Row as $row) {
+                $rowData = [];
+                foreach ($row->Cell as $cell) {
+                    $data = $cell->Data;
+                    $rowData[] = $data !== null ? (string)$data : '';
+                }
+                // Skip completely empty rows
+                if (count(array_filter($rowData)) > 0) {
+                    $rows[] = $rowData;
+                }
+            }
+        }
+
+        return $rows;
+    }
 }

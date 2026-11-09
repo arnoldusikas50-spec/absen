@@ -8,6 +8,21 @@ Format berkas ini mengacu pada prinsip [Keep a Changelog](https://keepachangelog
 
 ## [Unreleased / v2.1.0] - 2026-11-09
 
+### ⏰ Cronjob & Notifikasi Otomatis Pengingat Apel Kesadaran KORPRI
+- **Jadwal & Saluran Notifikasi Otomatis**:
+  - Menjadwalkan pengingat Apel Kesadaran KORPRI setiap tanggal **16 pukul 19:00 WITA** (H-1 sebelum apel tanggal 17 pukul 07.15 WITA).
+  - Mengirimkan pesan pengingat ke grup WhatsApp & Telegram:
+    > *"🇮🇩 **INFO : Bpk/Ibu Guru**, Apel Kesadaran KORPRI besok pagi, tanggal 17 [Bulan] [Tahun] dilaksanakan 07.15 WITA. Mohon kehadiran tepat waktu dengan mengenakan seragam KORPRI lengkap. Terima kasih. 🙏"*
+- **Integrasi Endpoint & Arsitektur Notifikasi**:
+  - Menambahkan endpoint rute `GET /cron/apel-kesadaran?key=...` pada `CronController`.
+  - Mendaftarkan channel notifikasi `'apel_kesadaran'` di `NotifChannelConfigModel` (`JENIS_LIST`) sehingga dapat diaktifkan/dinonaktifkan secara fleksibel oleh Administrator dari antarmuka pengaturan notifikasi.
+  - Menambahkan fungsi helper `notifyApelKesadaran(array $info)` pada `NotificationService` yang otomatis mengonversi format pesan untuk Telegram (HTML) dan WhatsApp (*bold* style).
+  - Mengimplementasikan validasi tanggal 16, konversi nama bulan Indonesia dinamis, serta mekanisme *idempotency guard* (`cron_notifikasi_log`) agar pesan tidak terkirim ganda dalam satu bulan yang sama.
+  - Menyediakan opsi pengujian manual/paksa menggunakan parameter query `&force=1` (mengabaikan pembatasan tanggal 16 dan log duplikasi).
+- **Template Crontab & Dokumentasi**:
+  - Memperbarui skrip shell template `cronjob` dengan baris cron: `0 19 16 * * curl ... /cron/apel-kesadaran`.
+  - Mendokumentasikan petunjuk verifikasi, pengujian `curl`, dan penjadwalan crontab di `CRONTAB.MD`.
+
 ### 🗺️ Peta Geofence Presensi (`/admin/presensi/lokasi`)
 - **Penyelesaian Masalah Blokir Tile OpenStreetMap 403 (Tile Usage Policy)**:
   - Mengganti tile provider default menjadi **Google Maps Tiles (Roadmap & Satelit Hybrid)** yang bebas blokir, sangat detail, dan akurat di seluruh pelosok Indonesia.
