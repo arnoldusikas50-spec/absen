@@ -8,6 +8,18 @@ use App\Models\DashboardModel;
 use App\Models\JabatanGuruModel;
 use App\Models\JurnalGuruModel;
 
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Reader\Csv as CsvReader;
+use PhpOffice\PhpSpreadsheet\Reader\Xls as XlsReader;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx as XlsxReader;
+use PhpOffice\PhpSpreadsheet\Reader\Xml as XmlReader;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
+
 class Jadwal extends BaseController
 {
     protected $elearningModel;
@@ -1336,9 +1348,12 @@ class Jadwal extends BaseController
     // EXPORT TEMPLATE EXCEL JADWAL PELAJARAN
     // ══════════════════════════════════════════════════════════════
 
+    /** Nama worksheet template pada file impor. */
+    private const IMPORT_SHEET_NAME = 'Template Import Jadwal';
+
     /**
-     * Export template Excel (XML Spreadsheet 2003) untuk import jadwal pelajaran.
-     * File bisa dibuka langsung oleh Microsoft Excel tanpa library eksternal.
+     * Export template Excel (.xlsx) untuk import jadwal pelajaran.
+     * File dibangun dengan PhpSpreadsheet sehingga selalu valid di Excel.
      */
     public function export_template_jadwal()
     {
@@ -1354,145 +1369,140 @@ class Jadwal extends BaseController
             return redirect()->back()->with('error', 'Tahun pelajaran/semester aktif belum diset');
         }
 
-        $kelas   = $this->elearningModel->getAllKelas($tp->id_tp, $smt->id_smt);
-        $mapels  = $this->elearningModel->getMapelArray();
-        $gurus   = $this->elearningModel->getAllGuru();
+        $kelas  = $this->elearningModel->getAllKelas($tp->id_tp, $smt->id_smt);
+        $mapels = $this->elearningModel->getAllMapel();
+        $gurus  = $this->elearningModel->getAllGuru();
 
-        $arrHari = ['1' => 'Senin', '2' => 'Selasa', '3' => 'Rabu', '4' => 'Kamis', '5' => 'Jumat', '6' => 'Sabtu'];
-
-        // --- Build XML Spreadsheet 2003 ---
-        $xml = '<?xml version="1.0"?>' . "\n";
-        $xml .= '<?mso-application progid="Excel.Sheet"?>' . "\n";
-        $xml .= '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' .
-            'xmlns:o="urn:schemas-microsoft-com:office:office" ' .
-            'xmlns:x="urn:schemas-microsoft-com:office:excel" ' .
-            'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" ' .
-            'xmlns:html="http://www.w3.org/TR/REC-html40">' . "\n";
-
-        // Styles
-        $xml .= '<Styles>' . "\n";
-        $xml .= '<Style ss:ID="Header" ss:Name="Header">' . "\n";
-        $xml .= '<Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="11"/>' . "\n";
-        $xml .= '<Interior ss:Color="#4338CA" ss:Pattern="Solid"/>' . "\n";
-        $xml .= '<Alignment ss:Horizontal="Center" ss:Vertical="Center"/>' . "\n";
-        $xml .= '</Style>' . "\n";
-        $xml .= '<Style ss:ID="Body">' . "\n";
-        $xml .= '<Font ss:Size="11"/>' . "\n";
-        $xml .= '<Alignment ss:Vertical="Center"/>' . "\n";
-        $xml .= '</Style>' . "\n";
-        $xml .= '<Style ss:ID="Example" ss:Parent="Body">' . "\n";
-        $xml .= '<Font ss:Color="#666666"/>' . "\n";
-        $xml .= '<Interior ss:Color="#FFF7E6" ss:Pattern="Solid"/>' . "\n";
-        $xml .= '</Style>' . "\n";
-        $xml .= '</Styles>' . "\n";
-
-        // Worksheet 1: Template
-        $xml .= '<Worksheet ss:Name="Template Import Jadwal">' . "\n";
-        $xml .= '<Table ss:ExpandedColumnCount="7" ss:ExpandedRowCount="20" x:FullColumns="1" x:FullRows="1">' . "\n";
-
-        // Header row
-        $headers = ['Kode Kelas', 'Nama Kelas', 'Hari', 'Mata Pelajaran', 'Kode Guru', 'Jam Mulai', 'Jam Selesai'];
-        $xml .= '<Row ss:AutoFitHeight="0">' . "\n";
-        foreach ($headers as $h) {
-            $xml .= '<Cell ss:StyleID="Header"><Data ss:Type="String">' . htmlspecialchars($h) . '</Data></Cell>' . "\n";
+        try {
+            $spreadsheet = $this->buildTemplateSpreadsheet($kelas, $mapels, $gurus);
+        } catch (\Throwable $e) {
+            log_message('error', '[export_template_jadwal] ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal membuat template Excel');
         }
-        $xml .= '</Row>' . "\n";
 
-        // Example rows
-        $contohDitambahkan = false;
-        foreach ($kelas as $k) {
-            if ($contohDitambahkan) break;
-            foreach (array_slice($arrHari, 0, 2, true) as $idHari => $namaHari) {
-                if ($contohDitambahkan) break;
-                foreach (array_slice($mapels, 0, 1, true) as $idMapel => $namaMapel) {
-                    foreach ($gurus as $g) {
-                        $xml .= '<Row ss:AutoFitHeight="0">' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($k->kode_kelas ?? '') . '</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($k->nama_kelas ?? '') . '</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($namaHari) . '</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($namaMapel) . '</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">' . htmlspecialchars($g->kode_guru ?? '') . '</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">07:00</Data></Cell>' . "\n";
-                        $xml .= '<Cell ss:StyleID="Example"><Data ss:Type="String">07:45</Data></Cell>' . "\n";
-                        $xml .= '</Row>' . "\n";
-                        $contohDitambahkan = true;
-                        break;
-                    }
-                }
+        $filename = 'template_jadwal_' . ($tp->tahun ?? 'tp') . '_smt' . ($smt->smt ?? '0') . '.xlsx';
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'jadwal_template_');
+        try {
+            (new XlsxWriter($spreadsheet))->save($tmpFile);
+            $content = file_get_contents($tmpFile);
+        } catch (\Throwable $e) {
+            log_message('error', '[export_template_jadwal] ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal membuat template Excel');
+        } finally {
+            if ($tmpFile !== false && is_file($tmpFile)) {
+                @unlink($tmpFile);
             }
+            $spreadsheet->disconnectWorksheets();
         }
 
-        $xml .= '</Table>' . "\n";
-        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
-        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
-        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
-        $xml .= '</WorksheetOptions>' . "\n";
-        $xml .= '</Worksheet>' . "\n";
-
-        // Worksheet 2: Data Referensi (Kelas)
-        $xml .= '<Worksheet ss:Name="Data Kelas">' . "\n";
-        $xml .= '<Table ss:ExpandedColumnCount="2" ss:ExpandedRowCount="' . (count($kelas) + 2) . '" x:FullColumns="1">' . "\n";
-        $xml .= '<Row><Cell ss:StyleID="Header"><Data ss:Type="String">Kode Kelas</Data></Cell>' .
-            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Kelas</Data></Cell></Row>' . "\n";
-        foreach ($kelas as $k) {
-            $xml .= '<Row>' .
-                '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($k->kode_kelas ?? '') . '</Data></Cell>' .
-                '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($k->nama_kelas ?? '') . '</Data></Cell>' .
-                '</Row>' . "\n";
+        if ($content === false || $content === '') {
+            return redirect()->back()->with('error', 'Gagal membuat template Excel');
         }
-        $xml .= '</Table>' . "\n";
-        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
-        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
-        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
-        $xml .= '</WorksheetOptions>' . "\n";
-        $xml .= '</Worksheet>' . "\n";
-
-        // Worksheet 3: Data Referensi (Mapel & Guru)
-        $xml .= '<Worksheet ss:Name="Data Mapel & Guru">' . "\n";
-        $xml .= '<Table ss:ExpandedColumnCount="4" ss:ExpandedRowCount="' . (max(count($mapels), count($gurus)) + 2) . '" x:FullColumns="1">' . "\n";
-        $xml .= '<Row>' .
-            '<Cell ss:StyleID="Header"><Data ss:Type="String">Kode Mapel</Data></Cell>' .
-            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Mapel</Data></Cell>' .
-            '<Cell ss:StyleID="Header"><Data ss:Type="String">Kode Guru</Data></Cell>' .
-            '<Cell ss:StyleID="Header"><Data ss:Type="String">Nama Guru</Data></Cell>' .
-            '</Row>' . "\n";
-        $mapelArr = array_values($mapels);
-        $guruArr  = array_values($gurus);
-        $maxRow   = max(count($mapelArr), count($guruArr));
-        for ($i = 0; $i < $maxRow; $i++) {
-            $xml .= '<Row>';
-            if (isset($mapelArr[$i])) {
-                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($mapelArr[$i]->id_mapel ?? '') . '</Data></Cell>' .
-                    '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($mapelArr[$i]->nama_mapel ?? '') . '</Data></Cell>';
-            } else {
-                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>' .
-                    '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>';
-            }
-            if (isset($guruArr[$i])) {
-                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($guruArr[$i]->kode_guru ?? '') . '</Data></Cell>' .
-                    '<Cell ss:StyleID="Body"><Data ss:Type="String">' . htmlspecialchars($guruArr[$i]->nama_guru ?? '') . '</Data></Cell>';
-            } else {
-                $xml .= '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>' .
-                    '<Cell ss:StyleID="Body"><Data ss:Type="String"></Data></Cell>';
-            }
-            $xml .= '</Row>' . "\n";
-        }
-        $xml .= '</Table>' . "\n";
-        $xml .= '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' . "\n";
-        $xml .= '<ProtectObjects>False</ProtectObjects>' . "\n";
-        $xml .= '<ProtectScenarios>False</ProtectScenarios>' . "\n";
-        $xml .= '</WorksheetOptions>' . "\n";
-        $xml .= '</Worksheet>' . "\n";
-
-        $xml .= '</Workbook>' . "\n";
-
-        $filename = 'template_jadwal_' . ($tp->tahun ?? 'tp') . '_smt' . ($smt->smt ?? '0') . '.xml';
 
         return $this->response
-            ->setContentType('application/vnd.ms-excel')
+            ->setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->setHeader('Cache-Control', 'no-cache, must-revalidate')
-            ->setBody($xml);
+            ->setBody($content);
+    }
+
+    /**
+     * Susun workbook template: sheet isian + dua sheet referensi.
+     */
+    private function buildTemplateSpreadsheet(array $kelas, array $mapels, array $gurus): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('Sistem Presensi Ikasmedia')
+            ->setTitle('Template Import Jadwal Pelajaran');
+
+        // Sheet 1: template isian.
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(self::IMPORT_SHEET_NAME);
+        $sheet->fromArray(
+            ['Kode Kelas', 'Nama Kelas', 'Hari', 'Mata Pelajaran', 'Kode Guru', 'Jam Mulai', 'Jam Selesai'],
+            null,
+            'A1'
+        );
+
+        $contoh = [];
+        $kelasContoh = array_values($kelas)[0] ?? null;
+        $mapelContoh = array_values($mapels)[0] ?? null;
+        $guruContoh  = array_values($gurus)[0] ?? null;
+        if ($kelasContoh && $mapelContoh && $guruContoh) {
+            $contoh[] = [
+                (string) ($kelasContoh->kode_kelas ?? ''),
+                (string) ($kelasContoh->nama_kelas ?? ''),
+                'Senin',
+                (string) ($mapelContoh->nama_mapel ?? ''),
+                (string) ($guruContoh->kode_guru ?? ''),
+                '07:00',
+                '07:45',
+            ];
+            $sheet->fromArray($contoh, null, 'A2');
+            $sheet->getStyle('A2:G2')->applyFromArray([
+                'font' => ['color' => ['rgb' => '666666']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFF7E6']],
+            ]);
+        }
+
+        $sheet->getStyle('A1:G1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4338CA']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        foreach (['A' => 14, 'B' => 22, 'C' => 11, 'D' => 30, 'E' => 14, 'F' => 12, 'G' => 12] as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+        $sheet->freezePane('A2');
+
+        // Sheet 2: referensi kelas.
+        $refKelas = $spreadsheet->createSheet();
+        $refKelas->setTitle('Data Kelas');
+        $rowsKelas = [['Kode Kelas', 'Nama Kelas']];
+        foreach ($kelas as $k) {
+            $rowsKelas[] = [(string) ($k->kode_kelas ?? ''), (string) ($k->nama_kelas ?? '')];
+        }
+        $refKelas->fromArray($rowsKelas, null, 'A1');
+        $this->styleImportReferenceSheet($refKelas, ['A' => 16, 'B' => 24]);
+
+        // Sheet 3: referensi mapel & guru.
+        $refMapel = $spreadsheet->createSheet();
+        $refMapel->setTitle('Data Mapel & Guru');
+        $mapelArr = array_values($mapels);
+        $guruArr  = array_values($gurus);
+        $rowsRef  = [['Kode Mapel', 'Nama Mapel', 'Kode Guru', 'Nama Guru']];
+        $maxRow   = max(count($mapelArr), count($guruArr));
+        for ($i = 0; $i < $maxRow; $i++) {
+            $rowsRef[] = [
+                (string) ($mapelArr[$i]->kode ?? ''),
+                (string) ($mapelArr[$i]->nama_mapel ?? ''),
+                (string) ($guruArr[$i]->kode_guru ?? ''),
+                (string) ($guruArr[$i]->nama_guru ?? ''),
+            ];
+        }
+        $refMapel->fromArray($rowsRef, null, 'A1');
+        $this->styleImportReferenceSheet($refMapel, ['A' => 14, 'B' => 30, 'C' => 14, 'D' => 30]);
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        return $spreadsheet;
+    }
+
+    /** Header + lebar kolom untuk sheet referensi pada template impor. */
+    private function styleImportReferenceSheet(Worksheet $sheet, array $widths): void
+    {
+        $lastColumn = Coordinate::stringFromColumnIndex(count($widths));
+        $sheet->getStyle('A1:' . $lastColumn . '1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4338CA']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        foreach ($widths as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+        $sheet->freezePane('A2');
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1500,7 +1510,7 @@ class Jadwal extends BaseController
     // ══════════════════════════════════════════════════════════════
 
     /**
-     * Import jadwal dari file Excel XML Spreadsheet 2003 atau CSV.
+     * Import jadwal dari file .xlsx, .xls, Excel XML Spreadsheet 2003, atau CSV.
      */
     public function import_jadwal()
     {
@@ -1523,25 +1533,32 @@ class Jadwal extends BaseController
             return $this->response->setJSON(['status' => false, 'message' => 'File tidak valid atau tidak diunggah']);
         }
 
-        $ext = strtolower($file->getClientExtension());
-        if (!in_array($ext, ['xml', 'csv', 'xls'], true)) {
-            return $this->response->setJSON(['status' => false, 'message' => 'Format file tidak didukung. Gunakan .xml (template Excel), .csv atau .xls']);
+        $ext = strtolower((string) $file->getClientExtension());
+        if (!in_array($ext, ['xlsx', 'xls', 'xml', 'csv'], true)) {
+            return $this->response->setJSON([
+                'status' => false,
+                'message' => 'Format file tidak didukung. Gunakan .xlsx, .xls, .xml (Excel 2003) atau .csv',
+            ]);
         }
 
-        $content = file_get_contents($file->getTempName());
-        if ($content === false) {
-            return $this->response->setJSON(['status' => false, 'message' => 'Gagal membaca file']);
-        }
-
-        $rows = [];
-        if ($ext === 'csv') {
-            $rows = $this->parseCsvImport($content);
-        } else {
-            $rows = $this->parseXmlImport($content);
+        try {
+            $rows = $this->readImportRows($file->getTempName(), $ext);
+        } catch (\Throwable $e) {
+            log_message('error', '[import_jadwal] baca file gagal: ' . $e->getMessage());
+            return $this->response->setJSON([
+                'status' => false,
+                'message' => 'Gagal membaca file. Pastikan isinya benar-benar .xlsx, .xls, .xml (Excel 2003) atau .csv',
+            ]);
         }
 
         if (empty($rows)) {
             return $this->response->setJSON(['status' => false, 'message' => 'Tidak ada data valid yang ditemukan dalam file']);
+        }
+
+        // Baris judul template bukan data jadwal — jangan dilaporkan gagal.
+        $firstRowNo = array_key_first($rows);
+        if ($firstRowNo !== null && $this->isImportHeaderRow($rows[$firstRowNo])) {
+            unset($rows[$firstRowNo]);
         }
 
         // Lookup maps
@@ -1572,13 +1589,7 @@ class Jadwal extends BaseController
         $insert = [];
         $errorRows = [];
         $success = 0;
-        $lineNo = 1;
-
-        foreach ($rows as $r) {
-            $lineNo++;
-            // Skip baris kosong atau baris header
-            if (empty(array_filter($r))) continue;
-
+        foreach ($rows as $lineNo => $r) {
             $kodeKelas   = strtoupper(trim($r[0] ?? ''));
             $namaKelas   = strtoupper(trim($r[1] ?? ''));
             $hari        = strtoupper(trim($r[2] ?? ''));
@@ -1774,51 +1785,120 @@ class Jadwal extends BaseController
     // ══════════════════════════════════════════════════════════════
 
     /**
-     * Parse CSV content to array of rows.
+     * Baca file impor menjadi baris [A..G => teks] dengan nomor baris aslinya.
+     * Nilai dibaca per sel, sehingga sel kosong tidak menggeser kolom.
      */
-    private function parseCsvImport(string $content): array
+    private function readImportRows(string $path, string $ext): array
     {
-        $rows = [];
-        $lines = explode("\n", $content);
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '') continue;
-            $rows[] = str_getcsv($line);
-        }
-        return $rows;
-    }
+        $spreadsheet = null;
+        $lastError = null;
 
-    /**
-     * Parse Excel XML Spreadsheet 2003 content to array of rows.
-     */
-    private function parseXmlImport(string $content): array
-    {
-        $rows = [];
-        $xml = @simplexml_load_string($content);
-        if ($xml === false) {
-            return $rows;
-        }
-
-        $ns = $xml->getNamespaces(true);
-        $ss = $xml->children($ns['ss'] ?? 'urn:schemas-microsoft-com:office:spreadsheet');
-
-        foreach ($ss->Worksheet as $worksheet) {
-            $table = $worksheet->Table;
-            if (!$table) continue;
-
-            foreach ($table->Row as $row) {
-                $rowData = [];
-                foreach ($row->Cell as $cell) {
-                    $data = $cell->Data;
-                    $rowData[] = $data !== null ? (string)$data : '';
-                }
-                // Skip completely empty rows
-                if (count(array_filter($rowData)) > 0) {
-                    $rows[] = $rowData;
-                }
+        foreach ($this->importReaders($ext) as $reader) {
+            if ($reader instanceof CsvReader) {
+                $reader->setInputEncoding('UTF-8');
+                $reader->setDelimiter($this->detectCsvDelimiter($path));
+            }
+            try {
+                $spreadsheet = $reader->load($path);
+                break;
+            } catch (\Throwable $e) {
+                $lastError = $e;
             }
         }
 
+        if ($spreadsheet === null) {
+            throw new \RuntimeException($lastError ? $lastError->getMessage() : 'Reader tidak tersedia');
+        }
+
+        // Utamakan sheet template; file tanpa sheet itu dibaca dari sheet pertama.
+        $sheet = $spreadsheet->getSheetByName(self::IMPORT_SHEET_NAME) ?: $spreadsheet->getSheet(0);
+
+        $rows = [];
+        $lastRow = $sheet->getHighestDataRow();
+        for ($row = 1; $row <= $lastRow; $row++) {
+            $cells = [];
+            for ($col = 1; $col <= 7; $col++) {
+                $coordinate = Coordinate::stringFromColumnIndex($col) . $row;
+                // Kolom F & G berisi jam.
+                $cells[] = $this->importCellText($sheet->getCell($coordinate), $col >= 6);
+            }
+            if (implode('', $cells) === '') {
+                continue;
+            }
+            $rows[$row] = $cells;
+        }
+
+        $spreadsheet->disconnectWorksheets();
+
         return $rows;
+    }
+
+    /** Reader yang dicoba sesuai ekstensi, termasuk file yang salah ekstensi. */
+    private function importReaders(string $ext): array
+    {
+        return match ($ext) {
+            'xlsx' => [new XlsxReader(), new XlsReader(), new XmlReader()],
+            'xls'  => [new XlsReader(), new XmlReader(), new XlsxReader()],
+            'xml'  => [new XmlReader(), new XlsxReader()],
+            'csv'  => [new CsvReader()],
+            default => [],
+        };
+    }
+
+    /** Teks satu sel impor; jam berbentuk pecahan Excel dikonversi ke HH:MM. */
+    private function importCellText(Cell $cell, bool $isTime): string
+    {
+        $value = $cell->getValue();
+
+        if ($value === null) {
+            return '';
+        }
+        if ($value instanceof \DateTimeInterface) {
+            return $isTime ? $value->format('H:i') : $value->format('Y-m-d');
+        }
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        if (is_numeric($value)) {
+            $number = (float) $value;
+            if ($isTime && $number > 0 && $number < 1) {
+                $minutes = (int) round($number * 1440) % 1440;
+                return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+            }
+            return trim((string) $cell->getFormattedValue());
+        }
+
+        return trim((string) $cell->getFormattedValue());
+    }
+
+    /** Deteksi pemisah CSV (koma, titik koma, atau tab) dari baris pertama. */
+    private function detectCsvDelimiter(string $path): string
+    {
+        $handle = @fopen($path, 'r');
+        if (!$handle) {
+            return ',';
+        }
+        $line = (string) fgets($handle, 4096);
+        fclose($handle);
+
+        $counts = [
+            ',' => substr_count($line, ','),
+            ';' => substr_count($line, ';'),
+            "\t" => substr_count($line, "\t"),
+        ];
+        arsort($counts);
+        $best = (string) array_key_first($counts);
+
+        return ($counts[$best] ?? 0) > 0 ? $best : ',';
+    }
+
+    /** True bila baris dianggap judul kolom template. */
+    private function isImportHeaderRow(array $cells): bool
+    {
+        $text = strtoupper((string) preg_replace('/\s+/', '', implode('', $cells)));
+
+        return str_contains($text, 'KODEKELAS')
+            || str_contains($text, 'NAMAKELAS')
+            || str_contains($text, 'MATAPELAJARAN');
     }
 }

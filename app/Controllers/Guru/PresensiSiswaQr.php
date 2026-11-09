@@ -1040,9 +1040,13 @@ class PresensiSiswaQr extends BaseController
         $useRfid   = $rfidValue !== '';
 
         if ($useRfid) {
-            // Cari siswa berdasarkan nomor_rfid terlebih dahulu.
-            $siswa = $this->findSiswaByRfid($rfidValue);
+            // Nomor yang sama berlaku untuk semua perangkat: kartu RFID
+            // (nomor_rfid), QR cetak, dan tembakan USB scanner diresolusi
+            // dengan urutan lookup yang identik — nomor_rfid → NIS → NISN → id.
+            $siswa = $this->findSiswaByRfid($rfidValue) ?? $this->findSiswaByQr($rfidValue);
             if ($siswa) {
+                $metode = (!empty($siswa->nomor_rfid) && strcasecmp(trim((string) $siswa->nomor_rfid), $rfidValue) === 0)
+                    ? 'rfid' : 'qr';
                 // Validasi geofence & jam operasional sebelum proses siswa.
                 $lat      = $this->request->getPost('lat');
                 $lng      = $this->request->getPost('lng');
@@ -1097,29 +1101,31 @@ class PresensiSiswaQr extends BaseController
                     if (($jadwalMsg = $this->isOutsideJadwalMasukSiswa($tanggal, $jam)) !== null) {
                         return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $jadwalMsg]);
                     }
-                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, 'rfid');
+                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, $metode);
                 }
                 if (($pulangMsg = $this->isTooEarlyPulangSiswa($tanggal, $jam)) !== null) {
                     return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $pulangMsg]);
                 }
-                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, 'rfid');
+                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, $metode);
             }
 
-            // Fallback: cek guru/GTK berdasarkan nomor_rfid.
-            $guru = $this->findGuruByRfid($rfidValue);
+            // Fallback: cek guru/GTK dengan nomor yang sama (nomor_rfid → NIP → kode_guru → username).
+            $guru = $this->findGuruByRfid($rfidValue) ?? $this->findGuruByQr($rfidValue);
             if ($guru) {
+                $guruMetode = (!empty($guru->nomor_rfid) && strcasecmp(trim((string) $guru->nomor_rfid), $rfidValue) === 0)
+                    ? 'rfid' : 'qr';
                 return $this->processGuruScan($guru, $mode, $tanggal, [
                     'lat' => $this->request->getPost('lat'),
                     'lng' => $this->request->getPost('lng'),
                     'akurasi' => $this->request->getPost('accuracy'),
                     'lokasi_id' => null,
-                ], 'rfid');
+                ], $guruMetode);
             }
 
             return $this->response->setJSON([
                 'status'  => false,
                 'type'    => 'error',
-                'message' => 'Kartu RFID tidak terdaftar. Hubungi admin untuk pendaftaran kartu.',
+                'message' => 'Nomor kartu tidak terdaftar. Tempel kartu RFID, tembak QR, atau ketik NIS yang sudah didaftarkan admin.',
             ]);
         }
 
@@ -1362,7 +1368,7 @@ class PresensiSiswaQr extends BaseController
             }
 
             // Deteksi sumber pemindaian (apakah cocok nomor_rfid atau QR biasa)
-            $source = (!empty($siswa->nomor_rfid) && $siswa->nomor_rfid === $qrValue) ? 'rfid' : 'qr';
+            $source = (!empty($siswa->nomor_rfid) && strcasecmp(trim((string) $siswa->nomor_rfid), $qrValue) === 0) ? 'rfid' : 'qr';
 
             if ($mode === 'masuk') {
                 // Batasan jadwal masuk ala absen wajah (buka 1 jam sebelum
@@ -1864,31 +1870,39 @@ class PresensiSiswaQr extends BaseController
         try {
             $db = \Config\Database::connect();
 
-            // Coba match berurutan: NIS → NISN → id_siswa (angka)
+            // Satu resolusi untuk semua jalur (QR kamera, USB scanner, RFID):
+            // NIS → NISN → nomor_rfid → id_siswa. nomor_rfid ikut dibaca agar
+            // pemanggil bisa menyimpulkan metode scan dari nomor yang cocok,
+            // dan tidak dimasukkan bila migrasi RFID belum dijalankan.
+            $cols = 'id_siswa, nama, nis, nisn, foto, jenis_kelamin'
+                . ($db->fieldExists('nomor_rfid', 'master_siswa') ? ', nomor_rfid' : '');
+
             $row = $db->table('master_siswa')
-                ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin')
+                ->select($cols)
                 ->where('nis', $qrValue)
                 ->get()->getRow();
 
             if (!$row && !empty($qrValue)) {
                 $row = $db->table('master_siswa')
-                    ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin')
+                    ->select($cols)
                     ->where('nisn', $qrValue)
+                    ->get()->getRow();
+            }
+
+            // Nomor kartu RFID diperiksa lebih dulu: nomor inilah yang dicetak
+            // sebagai QR/barcode, dan UID numerik tidak boleh tertukar dengan
+            // id_siswa yang kebetulan angkanya sama.
+            if (!$row && $db->fieldExists('nomor_rfid', 'master_siswa') && !empty($qrValue)) {
+                $row = $db->table('master_siswa')
+                    ->select($cols)
+                    ->where('nomor_rfid', $qrValue)
                     ->get()->getRow();
             }
 
             if (!$row && is_numeric($qrValue) && (int)$qrValue > 0) {
                 $row = $db->table('master_siswa')
-                    ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin')
+                    ->select($cols)
                     ->where('id_siswa', (int)$qrValue)
-                    ->get()->getRow();
-            }
-
-            // Fallback: nomor_rfid (memungkinkan USB RFID Keyboard Wedge langsung terbaca otomatis)
-            if (!$row && $db->fieldExists('nomor_rfid', 'master_siswa') && !empty($qrValue)) {
-                $row = $db->table('master_siswa')
-                    ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin')
-                    ->where('nomor_rfid', $qrValue)
                     ->get()->getRow();
             }
 
@@ -2355,17 +2369,18 @@ class PresensiSiswaQr extends BaseController
                 if ($row) return $row;
             }
 
-            // 6. Angka: id_guru atau id_user
+            // 6. Nomor RFID Guru — nomor kartu yang sama dengan QR cetak.
+            // Dicek sebelum id agar UID numerik tidak tertukar dengan id_guru.
+            if ($db->fieldExists('nomor_rfid', 'master_guru')) {
+                $row = (clone $builder)->where('nomor_rfid', $clean)->get()->getRow();
+                if ($row) return $row;
+            }
+
+            // 7. Angka: id_guru atau id_user
             if (is_numeric($clean) && (int)$clean > 0) {
                 $row = (clone $builder)->where('id_guru', (int)$clean)->get()->getRow();
                 if ($row) return $row;
                 $row = (clone $builder)->where('id_user', (int)$clean)->get()->getRow();
-                if ($row) return $row;
-            }
-
-            // 7. Nomor RFID Guru
-            if ($db->fieldExists('nomor_rfid', 'master_guru')) {
-                $row = (clone $builder)->where('nomor_rfid', $clean)->get()->getRow();
                 if ($row) return $row;
             }
 

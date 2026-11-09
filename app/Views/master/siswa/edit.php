@@ -312,7 +312,7 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tglLahir) || $tglLahir === '0000-00-00
                                             <input type="text" id="f-nomor_rfid" name="nomor_rfid" inputmode="text" value="<?= $v($mapData, 'nomor_rfid') ?>" class="form-control-tw pl-9 font-mono text-uppercase" placeholder="04A1B2C3D" maxlength="64" autocomplete="off">
                                         </div>
                                         <p class="field-msg" data-msg-for="f-nomor_rfid"></p>
-                                        <p class="text-[11px] text-slate-400 mt-1 mb-0">UID kartu RFID siswa (dicetak pada kartu fisik). Kosongkan bila tidak pakai RFID.</p>
+                                        <p class="text-[11px] text-slate-400 mt-1 mb-0">Nomor kartu RFID siswa — nomor inilah yang dicetak sebagai QR/barcode dan dibaca reader RFID, jadi QR, tap kartu, dan USB scanner memakai nomor yang sama. Kosongkan bila tidak pakai RFID.</p>
                                     </div>
                                     <div>
                                         <label for="f-fingerprint_uid" class="form-label-tw">UserID Mesin Sidik Jari</label>

@@ -651,7 +651,7 @@ $csrfHash  = csrf_hash();
                         class="absolute right-48 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 transition-all"
                         title="Mode Fingerprint (kirim sebagai fingerprint_uid)">FP</button>
                 </div>
-                <p class="text-[10px] text-slate-400 mt-1 mb-0">Nomor yang tercantum pada Kartu Absen. Aktifkan RFID atau FP jika ini UID kartu RFID / UserID mesin sidik jari.</p>
+                <p class="text-[10px] text-slate-400 mt-1 mb-0">Satu nomor untuk semua perangkat: NIS, nomor QR/barcode kartu, atau UID kartu RFID semuanya diterima. Aktifkan RFID untuk reader kartu, FP untuk mesin sidik jari.</p>
             </div>
 
             <div class="mb-4">

@@ -52,7 +52,9 @@ class Presensi extends BaseController
             }
         }
 
-        $siswa->qr_value = !empty($siswa->nis) ? trim($siswa->nis) : (!empty($siswa->nisn) ? trim($siswa->nisn) : (string)$siswa->id_siswa);
+        // Nomor QR di layar siswa harus sama dengan yang tercetak di kartu
+        // (nomor kartu RFID bila sudah didaftarkan, jika tidak NIS/NISN).
+        $siswa->qr_value = \App\Controllers\Admin\KartuSiswa::nomorKartuSiswa($siswa);
         $siswa->foto_url = \App\Controllers\Admin\KartuSiswa::resolveFotoUrl($siswa->foto ?? null, $siswa->nis ?? null);
 
         return $siswa;

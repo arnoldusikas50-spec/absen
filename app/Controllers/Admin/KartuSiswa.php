@@ -168,6 +168,7 @@ class KartuSiswa extends BaseController
 
         $db = \Config\Database::connect();
         $hasBukuInduk = $db->tableExists('buku_induk');
+        $hasRfidSiswa = $db->fieldExists('nomor_rfid', 'master_siswa');
 
         $kelases      = [];
         $siswaOptions = [];
@@ -241,7 +242,8 @@ class KartuSiswa extends BaseController
             // Query data siswa yang akan ditampilkan kartunya — AKTIF saja.
             try {
                 $builder = $db->table('master_siswa ms')
-                    ->select('ms.id_siswa, ms.nama, ms.nis, ms.nisn, ms.foto, ms.jenis_kelamin, mk.id_kelas, mk.nama_kelas')
+                    ->select('ms.id_siswa, ms.nama, ms.nis, ms.nisn, ms.foto, ms.jenis_kelamin, mk.id_kelas, mk.nama_kelas'
+                        . ($hasRfidSiswa ? ', ms.nomor_rfid' : ''))
                     ->join('kelas_siswa ks', 'ks.id_siswa = ms.id_siswa')
                     ->join('master_kelas mk', 'mk.id_kelas = ks.id_kelas');
                 if ($hasBukuInduk) {
@@ -279,7 +281,7 @@ class KartuSiswa extends BaseController
 
         // Format data siswa (QR value & photo)
         foreach ($siswaList as $s) {
-            $s->qr_value = !empty($s->nis) ? trim($s->nis) : (!empty($s->nisn) ? trim($s->nisn) : (string)$s->id_siswa);
+            $s->qr_value = self::nomorKartuSiswa($s);
             $s->foto_url = self::resolveFotoUrl($s->foto, $s->nis);
         }
 
@@ -347,6 +349,7 @@ class KartuSiswa extends BaseController
 
         $db = \Config\Database::connect();
         $hasBukuInduk = $db->tableExists('buku_induk');
+        $hasRfidSiswa = $db->fieldExists('nomor_rfid', 'master_siswa');
 
         $siswaList = [];
         $terpotong = false;
@@ -358,7 +361,8 @@ class KartuSiswa extends BaseController
         if ($catatan === '') {
             try {
                 $builder = $db->table('master_siswa ms')
-                    ->select('ms.id_siswa, ms.nama, ms.nis, ms.nisn, ms.foto, ms.jenis_kelamin, mk.id_kelas, mk.nama_kelas')
+                    ->select('ms.id_siswa, ms.nama, ms.nis, ms.nisn, ms.foto, ms.jenis_kelamin, mk.id_kelas, mk.nama_kelas'
+                        . ($hasRfidSiswa ? ', ms.nomor_rfid' : ''))
                     ->join('kelas_siswa ks', 'ks.id_siswa = ms.id_siswa')
                     ->join('master_kelas mk', 'mk.id_kelas = ks.id_kelas');
                 if ($hasBukuInduk) {
@@ -395,7 +399,7 @@ class KartuSiswa extends BaseController
         }
 
         foreach ($siswaList as $s) {
-            $s->qr_value = !empty($s->nis) ? trim($s->nis) : (!empty($s->nisn) ? trim($s->nisn) : (string)$s->id_siswa);
+            $s->qr_value = self::nomorKartuSiswa($s);
             $s->foto_url = self::resolveFotoUrl($s->foto, $s->nis);
         }
 
@@ -493,6 +497,31 @@ class KartuSiswa extends BaseController
             'status' => true,
             'data'   => $siswa
         ]);
+    }
+
+    /**
+     * Satu nomor untuk semua perangkat scan.
+     *
+     * Nomor kartu RFID dipakai lebih dulu supaya QR/barcode yang dicetak,
+     * chip RFID, dan input USB scanner semuanya membawa nomor yang identik.
+     * Bila kartu RFID belum didaftarkan, tetap NIS → NISN → id_siswa seperti
+     * sebelumnya. Backend scanner menerima ketiga nomor itu, jadi kartu lama
+     * yang masih mencetak NIS tetap valid.
+     */
+    public static function nomorKartuSiswa(object $row): string
+    {
+        $rfid = trim((string) ($row->nomor_rfid ?? ''));
+        if ($rfid !== '') {
+            return $rfid;
+        }
+        if (!empty($row->nis)) {
+            return trim((string) $row->nis);
+        }
+        if (!empty($row->nisn)) {
+            return trim((string) $row->nisn);
+        }
+
+        return (string) ($row->id_siswa ?? '');
     }
 
     /**

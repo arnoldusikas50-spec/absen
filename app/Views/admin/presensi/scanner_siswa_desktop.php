@@ -1020,9 +1020,9 @@
                       .html('<i class="bi bi-credit-card-2-front mr-1"></i> RFID AKTIF');
                 $btnRfid.addClass('active-scanner-tab').removeClass('bg-slate-800 text-slate-300 border-slate-600');
                 $btnFp.removeClass('active-scanner-tab').addClass('bg-slate-800 text-slate-300 border-slate-600');
-                $lblText.text('Kartu RFID');
+                $lblText.text('Kartu RFID / Nomor Kartu');
                 $lblIcon.attr('class', 'bi bi-credit-card-2-front text-emerald-400');
-                $input.attr('placeholder', 'Sentuh kartu RFID di scanner / reader…');
+                $input.attr('placeholder', 'Tempel kartu RFID, tembak QR, atau ketik NIS…');
             } else if (fpMode) {
                 $badge.removeClass('hidden bg-emerald-900/60 text-emerald-200 border-emerald-500/30')
                       .addClass('bg-purple-900/60 text-purple-200 border-purple-500/30')

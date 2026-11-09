@@ -47,6 +47,7 @@ class KartuGuru extends BaseController
             }
         }
         $db     = \Config\Database::connect();
+        $hasRfidGuru = $db->fieldExists('nomor_rfid', 'master_guru');
 
         $guruOptions = [];
         $guruList    = [];
@@ -73,7 +74,8 @@ class KartuGuru extends BaseController
         if ($catatan === '') {
             try {
                 $builder = $db->table('master_guru')
-                    ->select('id_guru, id_user, nama_guru, nip, kode_guru, nuptk, jenis_ptk, tgs_tambahan, status_pegawai, jenis_kelamin, foto, username');
+                    ->select('id_guru, id_user, nama_guru, nip, kode_guru, nuptk, jenis_ptk, tgs_tambahan, status_pegawai, jenis_kelamin, foto, username'
+                    . ($hasRfidGuru ? ', nomor_rfid' : ''));
 
                 if ($idGuru > 0) {
                     $builder->where('id_guru', $idGuru);
@@ -96,7 +98,7 @@ class KartuGuru extends BaseController
 
         // Format data guru (QR value & photo)
         foreach ($guruList as $g) {
-            $g->qr_value = !empty($g->nip) ? trim($g->nip) : (!empty($g->kode_guru) ? trim($g->kode_guru) : (!empty($g->username) ? trim($g->username) : (string)$g->id_guru));
+            $g->qr_value = self::nomorKartuGuru($g);
             $g->foto_url = self::resolveFotoUrl($g->foto, $g->nama_guru);
             $g->jabatan  = !empty($g->tgs_tambahan) ? $g->tgs_tambahan : (!empty($g->jenis_ptk) ? $g->jenis_ptk : 'Guru / Tenaga Pendidik');
         }
@@ -156,6 +158,7 @@ class KartuGuru extends BaseController
             }
         }
         $db     = \Config\Database::connect();
+        $hasRfidGuru = $db->fieldExists('nomor_rfid', 'master_guru');
 
         $guruList  = [];
         $terpotong = false;
@@ -163,7 +166,8 @@ class KartuGuru extends BaseController
 
         try {
             $builder = $db->table('master_guru')
-                ->select('id_guru, id_user, nama_guru, nip, kode_guru, nuptk, jenis_ptk, tgs_tambahan, status_pegawai, jenis_kelamin, foto, username');
+                ->select('id_guru, id_user, nama_guru, nip, kode_guru, nuptk, jenis_ptk, tgs_tambahan, status_pegawai, jenis_kelamin, foto, username'
+                    . ($hasRfidGuru ? ', nomor_rfid' : ''));
 
             if ($idGuru > 0) {
                 $builder->where('id_guru', $idGuru);
@@ -184,7 +188,7 @@ class KartuGuru extends BaseController
         }
 
         foreach ($guruList as $g) {
-            $g->qr_value = !empty($g->nip) ? trim($g->nip) : (!empty($g->kode_guru) ? trim($g->kode_guru) : (!empty($g->username) ? trim($g->username) : (string)$g->id_guru));
+            $g->qr_value = self::nomorKartuGuru($g);
             $g->foto_url = self::resolveFotoUrl($g->foto, $g->nama_guru);
             $g->jabatan  = !empty($g->tgs_tambahan) ? $g->tgs_tambahan : (!empty($g->jenis_ptk) ? $g->jenis_ptk : 'Guru / GTK');
         }
@@ -257,6 +261,34 @@ class KartuGuru extends BaseController
         }
 
         return (int) (session()->get('id_guru') ?? 0);
+    }
+
+    /**
+     * Satu nomor untuk semua perangkat scan.
+     *
+     * Nomor kartu RFID dipakai lebih dulu supaya QR/barcode yang dicetak,
+     * chip RFID, dan input USB scanner semuanya membawa nomor yang identik.
+     * Bila kartu RFID belum didaftarkan, tetap NIP → kode_guru → username →
+     * id_guru seperti sebelumnya. Backend scanner menerima semuanya, jadi
+     * kartu lama yang masih mencetak NIP tetap valid.
+     */
+    public static function nomorKartuGuru(object $row): string
+    {
+        $rfid = trim((string) ($row->nomor_rfid ?? ''));
+        if ($rfid !== '') {
+            return $rfid;
+        }
+        if (!empty($row->nip)) {
+            return trim((string) $row->nip);
+        }
+        if (!empty($row->kode_guru)) {
+            return trim((string) $row->kode_guru);
+        }
+        if (!empty($row->username)) {
+            return trim((string) $row->username);
+        }
+
+        return (string) ($row->id_guru ?? '');
     }
 
     /**

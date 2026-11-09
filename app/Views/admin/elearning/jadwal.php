@@ -94,7 +94,7 @@ $totalKelas = count($kelas ?? []);
                     <button type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors shadow-xs" onclick="document.getElementById('importJadwalFile').click()">
                         <i class="bi bi-file-earmark-arrow-up"></i> Import Excel
                     </button>
-                    <input type="file" id="importJadwalFile" accept=".xml,.csv,.xls" class="hidden" onchange="importJadwal(this)">
+                    <input type="file" id="importJadwalFile" accept=".xlsx,.xls,.xml,.csv" class="hidden" onchange="importJadwal(this)">
                 <?php endif; ?>
             </div>
         </div>

@@ -47,6 +47,15 @@ Format berkas ini mengacu pada prinsip [Keep a Changelog](https://keepachangelog
   - Memperbarui teks standby dan instruksi pemindai menjadi *"Silakan Scan QR / RFID / Sidik Jari"*.
   - Menyelaraskan ikon pendukung menggunakan ikon Bootstrap Icons resmi (`bi-credit-card-2-front` dan `bi-fingerprint`).
 
+### 🔢 Satu Nomor untuk QR Code, RFID, dan USB Barcode Scanner
+- **Nomor Kartu Tunggal**:
+  - `qr_value` pada cetak kartu siswa (`KartuSiswa`), cetak kartu guru (`KartuGuru`), dan QR di portal siswa kini memakai **nomor kartu RFID (`nomor_rfid`)** bila sudah didaftarkan, lalu fallback ke NIS → NISN → id (guru: NIP → kode_guru → username → id). Nomor yang tercetak sebagai QR/barcode, chip RFID, dan hasil tembakan USB scanner jadi identik.
+  - Helper `KartuSiswa::nomorKartuSiswa()` dan `KartuGuru::nomorKartuGuru()` memusatkan aturan nomor tersebut; kartu lama yang masih mencetak NIS/NIP tetap valid.
+- **Resolusi Lookup yang Seragam**:
+  - Jalur `rfid_value` kini memakai urutan lookup yang sama dengan `qr_value` (`nomor_rfid` → NIS → NISN → id_siswa, lalu guru: `nomor_rfid` → NIP → kode_guru → username), sehingga tap kartu, QR kamera, dan USB scanner saling menggantikan tanpa perlu menukar nomor.
+  - Pemeriksaan `nomor_rfid` dipindahkan sebelum fallback numerik `id_siswa`/`id_guru` agar UID numerik tidak tertukar dengan ID record lain.
+  - Metadata `metode` kini ditentukan dari nomor yang benar-benar cocok (`rfid` bila sama dengan `nomor_rfid`, selain itu `qr`), bukan dari perangkat yang dipakai.
+
 ### 🎨 Desain & UI/UX (Portal Siswa `/siswa/presensi`)
 - **Modernisasi Shell Aplikasi & Layout (`mobile_siswa.php`)**:
   - Membatasi wadah aplikasi ke ukuran mobile standar (`max-width: 480px`) di tengah layar (*centered*) dengan latar warna slate halus (`#f8fafc`).
