@@ -1097,12 +1097,12 @@ class PresensiSiswaQr extends BaseController
                     if (($jadwalMsg = $this->isOutsideJadwalMasukSiswa($tanggal, $jam)) !== null) {
                         return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $jadwalMsg]);
                     }
-                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, 'rfid');
                 }
                 if (($pulangMsg = $this->isTooEarlyPulangSiswa($tanggal, $jam)) !== null) {
                     return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $pulangMsg]);
                 }
-                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, 'rfid');
             }
 
             // Fallback: cek guru/GTK berdasarkan nomor_rfid.
@@ -1113,7 +1113,7 @@ class PresensiSiswaQr extends BaseController
                     'lng' => $this->request->getPost('lng'),
                     'akurasi' => $this->request->getPost('accuracy'),
                     'lokasi_id' => null,
-                ]);
+                ], 'rfid');
             }
 
             return $this->response->setJSON([
@@ -1270,7 +1270,8 @@ class PresensiSiswaQr extends BaseController
             }
             $guru = $this->findGuruByQr($qrValue);
             if ($guru) {
-                return $this->processGuruScan($guru, $mode, $tanggal, $scanLoc);
+                $guruSource = (!empty($guru->nomor_rfid) && $guru->nomor_rfid === $qrValue) ? 'rfid' : 'qr';
+                return $this->processGuruScan($guru, $mode, $tanggal, $scanLoc, $guruSource);
             }
             return $this->response->setJSON([
                 'status'  => false,
@@ -1295,7 +1296,8 @@ class PresensiSiswaQr extends BaseController
                         'message' => 'Wali kelas hanya dapat mencatat siswa kelas perwaliannya.',
                     ]);
                 }
-                return $this->processGuruScan($guru, $mode, $tanggal, $scanLoc);
+                $guruSource = (!empty($guru->nomor_rfid) && $guru->nomor_rfid === $qrValue) ? 'rfid' : 'qr';
+                return $this->processGuruScan($guru, $mode, $tanggal, $scanLoc, $guruSource);
             }
 
             return $this->response->setJSON([
@@ -1359,20 +1361,23 @@ class PresensiSiswaQr extends BaseController
                 $idKelas = (int) $existing->id_kelas;
             }
 
+            // Deteksi sumber pemindaian (apakah cocok nomor_rfid atau QR biasa)
+            $source = (!empty($siswa->nomor_rfid) && $siswa->nomor_rfid === $qrValue) ? 'rfid' : 'qr';
+
             if ($mode === 'masuk') {
                 // Batasan jadwal masuk ala absen wajah (buka 1 jam sebelum
                 // jam_masuk, tutup 3 jam setelah jam_masuk hari ini).
                 if (($jadwalMsg = $this->isOutsideJadwalMasukSiswa($tanggal, $jam)) !== null) {
                     return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $jadwalMsg]);
                 }
-                return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, $source);
             } else {
                 // Batasan jadwal pulang: tolak scan keluar sebelum pulang
                 // dibuka (jendela masuk ditutup atau jam_pulang tercapai).
                 if (($pulangMsg = $this->isTooEarlyPulangSiswa($tanggal, $jam)) !== null) {
                     return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $pulangMsg]);
                 }
-                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc, $source);
             }
 
         } catch (\Throwable $e) {
@@ -1879,6 +1884,14 @@ class PresensiSiswaQr extends BaseController
                     ->get()->getRow();
             }
 
+            // Fallback: nomor_rfid (memungkinkan USB RFID Keyboard Wedge langsung terbaca otomatis)
+            if (!$row && $db->fieldExists('nomor_rfid', 'master_siswa') && !empty($qrValue)) {
+                $row = $db->table('master_siswa')
+                    ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin')
+                    ->where('nomor_rfid', $qrValue)
+                    ->get()->getRow();
+            }
+
             return $row ?: null;
         } catch (\Throwable $e) {
             return null;
@@ -1986,7 +1999,7 @@ class PresensiSiswaQr extends BaseController
     /** Proses check-in */
     private function processCheckIn(
         $db, object $siswa, ?object $existing,
-        int $idKelas, ?int $idGuru, string $tanggal, string $jam, array $scanLoc = []
+        int $idKelas, ?int $idGuru, string $tanggal, string $jam, array $scanLoc = [], string $source = 'qr'
     ) {
         $hasJamCol = $db->fieldExists('jam', 'presensi_siswa');
         $locCols = [];
@@ -1997,7 +2010,7 @@ class PresensiSiswaQr extends BaseController
         // Audit sumber (best-effort, kolom baru dari migrasi 20261006).
         try {
             $ip = (string) $this->request->getIPAddress();
-            if ($db->fieldExists('sumber_masuk', 'presensi_siswa')) $locCols['sumber_masuk'] = 'qr';
+            if ($db->fieldExists('sumber_masuk', 'presensi_siswa')) $locCols['sumber_masuk'] = $source;
             if ($ip !== '' && $db->fieldExists('ip_masuk', 'presensi_siswa')) $locCols['ip_masuk'] = substr($ip, 0, 45);
         } catch (\Throwable $e) {
         }
@@ -2118,6 +2131,7 @@ class PresensiSiswaQr extends BaseController
         return $this->response->setJSON([
             'status'      => true,
             'type'        => 'check_in',
+            'metode'      => $source,
             'message'     => "{$siswa->nama} berhasil absen masuk pukul " . substr($jam, 0, 5) . '.'
                 . ($telatMenit > 0 ? ' Terlambat ' . $telatMenit . ' menit (batas ' . $batasMasukLabel . ').' : ''),
             'jam_masuk'   => substr($jam, 0, 5),
@@ -2130,7 +2144,7 @@ class PresensiSiswaQr extends BaseController
     /** Proses check-out */
     private function processCheckOut(
         $db, object $siswa, ?object $existing,
-        int $idKelas, ?int $idGuru, string $tanggal, string $jam, array $scanLoc = []
+        int $idKelas, ?int $idGuru, string $tanggal, string $jam, array $scanLoc = [], string $source = 'qr'
     ) {
         if (!$existing || empty($existing->jam_masuk)) {
             return $this->response->setJSON([
@@ -2158,7 +2172,7 @@ class PresensiSiswaQr extends BaseController
         }
         try {
             $ipOut = (string) $this->request->getIPAddress();
-            if ($db->fieldExists('sumber_keluar', 'presensi_siswa')) $locOut['sumber_keluar'] = 'qr';
+            if ($db->fieldExists('sumber_keluar', 'presensi_siswa')) $locOut['sumber_keluar'] = $source;
             if ($ipOut !== '' && $db->fieldExists('ip_keluar', 'presensi_siswa')) $locOut['ip_keluar'] = substr($ipOut, 0, 45);
             // Jam keluar akhirnya tercatat → penanda cron tidak berlaku lagi.
             if ($db->fieldExists('pulang_tidak_tercatat', 'presensi_siswa')) $locOut['pulang_tidak_tercatat'] = 0;
@@ -2196,6 +2210,7 @@ class PresensiSiswaQr extends BaseController
         return $this->response->setJSON([
             'status'     => true,
             'type'       => 'check_out',
+            'metode'     => $source,
             'message'    => "{$siswa->nama} berhasil absen keluar pukul " . substr($jam, 0, 5) . '.',
             'jam_keluar' => substr($jam, 0, 5),
             'siswa'      => $this->formatSiswaInfo($siswa, $existing, $idKelas),
@@ -2348,6 +2363,12 @@ class PresensiSiswaQr extends BaseController
                 if ($row) return $row;
             }
 
+            // 7. Nomor RFID Guru
+            if ($db->fieldExists('nomor_rfid', 'master_guru')) {
+                $row = (clone $builder)->where('nomor_rfid', $clean)->get()->getRow();
+                if ($row) return $row;
+            }
+
             return null;
         } catch (\Throwable $e) {
             return null;
@@ -2417,7 +2438,7 @@ class PresensiSiswaQr extends BaseController
     /**
      * Proses absensi harian Guru via QR Scan (Masuk & Keluar)
      */
-    private function processGuruScan(object $guru, string $mode, string $tanggal, array $scanLoc = [])
+    private function processGuruScan(object $guru, string $mode, string $tanggal, array $scanLoc = [], string $source = 'qr')
     {
         $db = \Config\Database::connect();
         if (!$db->tableExists('absensi_harian')) {
@@ -2453,9 +2474,9 @@ class PresensiSiswaQr extends BaseController
                 ->get()->getRow();
 
             if ($mode === 'masuk') {
-                return $this->processGuruCheckIn($db, $guru, $existing, $userId, $tanggal, $jam, $recordedTime, $scanLoc);
+                return $this->processGuruCheckIn($db, $guru, $existing, $userId, $tanggal, $jam, $recordedTime, $scanLoc, $source);
             } else {
-                return $this->processGuruCheckOut($db, $guru, $existing, $userId, $tanggal, $jam, $recordedTime, $scanLoc);
+                return $this->processGuruCheckOut($db, $guru, $existing, $userId, $tanggal, $jam, $recordedTime, $scanLoc, $source);
             }
         } catch (\Throwable $e) {
             log_message('error', '[PresensiSiswaQr::processGuruScan] ' . $e->getMessage());
@@ -2472,7 +2493,7 @@ class PresensiSiswaQr extends BaseController
      */
     private function processGuruCheckIn(
         $db, object $guru, ?object $existing, int $userId,
-        string $tanggal, string $jam, string $recordedTime, array $scanLoc = []
+        string $tanggal, string $jam, string $recordedTime, array $scanLoc = [], string $source = 'qr'
     ) {
         if ($existing && !empty($existing->jam_masuk)) {
             $masukStr = strlen((string)$existing->jam_masuk) >= 16
@@ -2638,6 +2659,7 @@ class PresensiSiswaQr extends BaseController
             'status'    => true,
             'type'      => 'check_in',
             'role'      => 'guru',
+            'metode'    => $source,
             'message'   => "{$guru->nama_guru} berhasil absen masuk pukul {$waktuStr}{$statusKet}.",
             'jam_masuk' => $waktuStr,
             'guru'      => $this->formatGuruInfo($guru, $resGuru),
@@ -2649,7 +2671,7 @@ class PresensiSiswaQr extends BaseController
      */
     private function processGuruCheckOut(
         $db, object $guru, ?object $existing, int $userId,
-        string $tanggal, string $jam, string $recordedTime, array $scanLoc = []
+        string $tanggal, string $jam, string $recordedTime, array $scanLoc = [], string $source = 'qr'
     ) {
         if (!$existing || empty($existing->jam_masuk)) {
             return $this->response->setJSON([
@@ -2842,6 +2864,7 @@ class PresensiSiswaQr extends BaseController
             'status'     => true,
             'type'       => 'check_out',
             'role'       => 'guru',
+            'metode'     => $source,
             'message'    => "{$guru->nama_guru} berhasil absen keluar pukul {$waktuStr}{$statusKet}.",
             'jam_keluar' => $waktuStr,
             'guru'       => $this->formatGuruInfo($guru, $resGuru),

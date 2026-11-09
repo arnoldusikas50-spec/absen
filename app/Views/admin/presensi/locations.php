@@ -327,9 +327,48 @@
 
                     <!-- Custom Floating Map Tool Buttons -->
                     <div class="map-topright-overlay">
-                        <button type="button" class="map-control-btn" onclick="toggleMapLayer()" id="btnLayerToggle" title="Ganti Tipe Peta (Jalan / Foto Satelit)">
-                            <i class="bi bi-layers text-base"></i>
-                        </button>
+                        <div class="relative">
+                            <button type="button" class="map-control-btn" onclick="toggleLayerMenu(event)" id="btnLayerToggle" title="Ganti Tipe Peta">
+                                <i class="bi bi-layers text-base"></i>
+                            </button>
+
+                            <!-- Dropdown Menu Layer Peta Modern -->
+                            <div id="mapLayerDropdown" class="hidden absolute right-0 top-11 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-2 w-64 z-[1000] text-xs">
+                                <div class="px-3 py-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                                    <span>Pilihan Tipe Peta</span>
+                                    <span class="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Bebas Blokir</span>
+                                </div>
+                                <button type="button" class="w-full text-left px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-semibold transition" onclick="selectMapLayer('google_street')">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="bi bi-map-fill text-blue-600 text-sm"></i>
+                                        <span>Google Maps (Jalan)</span>
+                                    </span>
+                                    <i class="bi bi-check-circle-fill text-blue-600 check-layer text-sm" id="check-google_street"></i>
+                                </button>
+                                <button type="button" class="w-full text-left px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-semibold transition" onclick="selectMapLayer('google_hybrid')">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="bi bi-globe-americas text-emerald-600 text-sm"></i>
+                                        <span>Google Satelit (Hybrid)</span>
+                                    </span>
+                                    <i class="bi bi-check-circle-fill text-blue-600 check-layer hidden text-sm" id="check-google_hybrid"></i>
+                                </button>
+                                <button type="button" class="w-full text-left px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-semibold transition" onclick="selectMapLayer('esri_street')">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="bi bi-compass text-amber-600 text-sm"></i>
+                                        <span>Esri World Street</span>
+                                    </span>
+                                    <i class="bi bi-check-circle-fill text-blue-600 check-layer hidden text-sm" id="check-esri_street"></i>
+                                </button>
+                                <button type="button" class="w-full text-left px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-semibold transition" onclick="selectMapLayer('osm_hot')">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="bi bi-pin-map text-rose-600 text-sm"></i>
+                                        <span>OpenStreetMap (HOT)</span>
+                                    </span>
+                                    <i class="bi bi-check-circle-fill text-blue-600 check-layer hidden text-sm" id="check-osm_hot"></i>
+                                </button>
+                            </div>
+                        </div>
+
                         <button type="button" class="map-control-btn" onclick="openGeofenceGuide()" title="Panduan & Rekomendasi Radius Geofence">
                             <i class="bi bi-question-circle text-base"></i>
                         </button>
@@ -698,8 +737,9 @@
     let map, tempMarker, tempCircle;
     let locationLayers = {};
     let locations = <?= json_encode($locations ?? []) ?>;
-    let currentMapLayerIndex = 0; // 0 = OSM, 1 = Satellite
-    let osmLayer, satLayer;
+    let activeLayerKey = localStorage.getItem('presensi_admin_map_layer') || 'google_street';
+    let baseLayers = {};
+    let currentActiveLayer = null;
 
     // Default coordinate (Monas Jakarta fallback)
     const defaultLat = -6.175392;
@@ -745,24 +785,58 @@
             tempMarker = null;
             tempCircle = null;
         });
+
+        // Tutup menu dropdown layer saat klik di luar
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#mapLayerDropdown, #btnLayerToggle').length) {
+                $('#mapLayerDropdown').addClass('hidden');
+            }
+        });
     });
 
     function initMap() {
-        // Basemap: Esri World Street Map (legacy MapServer).
-        // Riwayat: tile.openstreetmap.org diblokir OSM melanggar tile
-        // usage policy (app embed), lalu Carto (cartocdn) kini juga
-        // menyuntik watermark "API KEY REQUIRED" ke tile anonim. Jalur
-        // legacy Esri masih bebas-key dan sudah diverifikasi bodoh tile.
-        // Satelit bawah juga Esri (World_Imagery) — satu vendor konsisten.
-        osmLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.esri.com/">Esri</a> — sumber data: Esri, Maxar, Garmin, <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        // Multi-Provider Base Layers (Bebas Blokir 403 OSM Policy):
+        // 1. Google Maps (Roadmap) - Peta jalan resmi, super cepat & akurat di Indonesia
+        // 2. Google Maps (Hybrid)  - Foto satelit dengan batas jalan & nama gedung
+        // 3. Esri World Street     - Peta topografi & jalan Esri ArcGIS
+        // 4. OpenStreetMap (HOT)   - Tile server kemanusiaan OSM France (bebas blokir OSM Foundation)
+        baseLayers = {
+            google_street: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                subdomains: ['0', '1', '2', '3'],
+                maxZoom: 20,
+                attribution: '&copy; Google Maps'
+            }),
+            google_hybrid: L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                subdomains: ['0', '1', '2', '3'],
+                maxZoom: 20,
+                attribution: '&copy; Google Maps Satelit'
+            }),
+            esri_street: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: '&copy; Esri, Garmin, USGS'
+            }),
+            osm_hot: L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+                subdomains: 'abc',
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors, Humanitarian OpenStreetMap Team'
+            })
+        };
+
+        // Otomatis fallback jika ada kendala tile pada provider tertentu
+        Object.keys(baseLayers).forEach(key => {
+            baseLayers[key].on('tileerror', function () {
+                if (activeLayerKey !== 'google_hybrid' && activeLayerKey !== 'google_street') {
+                    console.warn(`Tile error on ${activeLayerKey}, auto-fallback to Google Street`);
+                    selectMapLayer('google_street');
+                }
+            });
         });
 
-        satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: '&copy; Esri, Maxar, Earthstar Geographics'
-        });
+        // Validasi layer aktif tersimpan
+        if (!baseLayers[activeLayerKey]) {
+            activeLayerKey = 'google_street';
+        }
+        currentActiveLayer = baseLayers[activeLayerKey];
 
         // Initial center
         let center = [defaultLat, defaultLng];
@@ -774,8 +848,8 @@
         map = L.map('map', {
             center: center,
             zoom: zoom,
-            layers: [osmLayer],
-            zoomControl: false // We will re-add at bottom-right or keep default
+            layers: [currentActiveLayer],
+            zoomControl: false
         });
 
         // Place zoom control at bottom-right
@@ -783,6 +857,9 @@
 
         // Add Scale
         L.control.scale({ imperial: false, position: 'bottomright' }).addTo(map);
+
+        // Update indikator centang di UI dropdown
+        updateLayerCheckUI(activeLayerKey);
 
         // Render Existing Location Markers
         renderAllLocations();
@@ -799,17 +876,38 @@
         }
     }
 
-    function toggleMapLayer() {
-        if (currentMapLayerIndex === 0) {
-            map.removeLayer(osmLayer);
-            map.addLayer(satLayer);
-            currentMapLayerIndex = 1;
-            $('#btnLayerToggle').addClass('bg-blue-50 text-blue-600').attr('title', 'Tampilkan Peta Jalan (Esri)');
+    function toggleLayerMenu(e) {
+        if (e) e.stopPropagation();
+        $('#mapLayerDropdown').toggleClass('hidden');
+    }
+
+    function selectMapLayer(layerKey) {
+        if (!baseLayers[layerKey] || layerKey === activeLayerKey && map.hasLayer(baseLayers[layerKey])) {
+            $('#mapLayerDropdown').addClass('hidden');
+            return;
+        }
+
+        if (currentActiveLayer) {
+            map.removeLayer(currentActiveLayer);
+        }
+
+        currentActiveLayer = baseLayers[layerKey];
+        map.addLayer(currentActiveLayer);
+        activeLayerKey = layerKey;
+        localStorage.setItem('presensi_admin_map_layer', layerKey);
+
+        updateLayerCheckUI(layerKey);
+        $('#mapLayerDropdown').addClass('hidden');
+    }
+
+    function updateLayerCheckUI(layerKey) {
+        $('.check-layer').addClass('hidden');
+        $('#check-' + layerKey).removeClass('hidden');
+
+        if (layerKey.includes('hybrid') || layerKey.includes('sat')) {
+            $('#btnLayerToggle').addClass('bg-emerald-50 text-emerald-600 border-emerald-300');
         } else {
-            map.removeLayer(satLayer);
-            map.addLayer(osmLayer);
-            currentMapLayerIndex = 0;
-            $('#btnLayerToggle').removeClass('bg-blue-50 text-blue-600').attr('title', 'Tampilkan Foto Satelit (Esri)');
+            $('#btnLayerToggle').removeClass('bg-emerald-50 text-emerald-600 border-emerald-300');
         }
     }
 
@@ -1305,7 +1403,7 @@
         );
     }
 
-    // Search Location via OpenStreetMap Nominatim
+    // Search Location via Photon (OSM-based) & Nominatim Fallback
     function handleSearchKey(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -1320,35 +1418,62 @@
         const btn = $('#btnMapSearch');
         btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
 
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=id&limit=1`)
+        // 1. Coba via Photon API (Komoot - bebas rate-limit & dirancang untuk pencarian publik)
+        fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1&lang=id`)
             .then(res => res.json())
             .then(data => {
-                if (data && data.length > 0) {
-                    const lat = parseFloat(data[0].lat);
-                    const lon = parseFloat(data[0].lon);
-                    map.setView([lat, lon], 17);
-                    setTempMarker(lat, lon);
-                    $('#btnClearSearch').removeClass('hidden');
-
-                    // If modal is open, fill name & coordinates
-                    if ($('#modalLocation').is(':visible')) {
-                        $('#lat').val(lat.toFixed(8));
-                        $('#lng').val(lon.toFixed(8));
-                        if (!$('#nama_lokasi').val()) {
-                            $('#nama_lokasi').val(data[0].display_name.split(',')[0]);
-                        }
-                    }
+                if (data && data.features && data.features.length > 0) {
+                    const feat = data.features[0];
+                    const lng  = parseFloat(feat.geometry.coordinates[0]);
+                    const lat  = parseFloat(feat.geometry.coordinates[1]);
+                    const label = feat.properties.name || feat.properties.city || query;
+                    applySearchResult(lat, lng, label);
                 } else {
-                    Swal.fire('Tidak Ditemukan', 'Lokasi tidak ditemukan. Coba ketikkan nama tempat, jalan, atau kota yang lebih spesifik.', 'info');
+                    // Fallback ke Nominatim OSM
+                    return fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=id&limit=1`)
+                        .then(r => r.json())
+                        .then(nomData => {
+                            if (nomData && nomData.length > 0) {
+                                applySearchResult(parseFloat(nomData[0].lat), parseFloat(nomData[0].lon), nomData[0].display_name.split(',')[0]);
+                            } else {
+                                Swal.fire('Tidak Ditemukan', 'Lokasi tidak ditemukan. Coba ketikkan nama tempat, jalan, atau kota yang lebih spesifik.', 'info');
+                            }
+                        });
                 }
             })
             .catch(err => {
-                console.error('Nominatim search error:', err);
-                Swal.fire('Pencarian Gagal', 'Gagal mencari lokasi via layanan peta OpenStreetMap.', 'error');
+                console.warn('Primary geocoder failed, trying fallback:', err);
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=id&limit=1`)
+                    .then(r => r.json())
+                    .then(nomData => {
+                        if (nomData && nomData.length > 0) {
+                            applySearchResult(parseFloat(nomData[0].lat), parseFloat(nomData[0].lon), nomData[0].display_name.split(',')[0]);
+                        } else {
+                            Swal.fire('Tidak Ditemukan', 'Lokasi tidak ditemukan. Coba ketikkan nama tempat atau kota yang lebih spesifik.', 'info');
+                        }
+                    })
+                    .catch(err2 => {
+                        console.error('All search geocoders failed:', err2);
+                        Swal.fire('Pencarian Gagal', 'Gagal mencari lokasi. Pastikan koneksi internet aktif.', 'error');
+                    });
             })
             .finally(() => {
                 btn.prop('disabled', false).html('Cari');
             });
+    }
+
+    function applySearchResult(lat, lng, label) {
+        map.setView([lat, lng], 17);
+        setTempMarker(lat, lng);
+        $('#btnClearSearch').removeClass('hidden');
+
+        if ($('#modalLocation').is(':visible')) {
+            $('#lat').val(lat.toFixed(8));
+            $('#lng').val(lng.toFixed(8));
+            if (!$('#nama_lokasi').val() && label) {
+                $('#nama_lokasi').val(label);
+            }
+        }
     }
 
     function clearMapSearch() {

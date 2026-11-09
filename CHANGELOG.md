@@ -8,6 +8,30 @@ Format berkas ini mengacu pada prinsip [Keep a Changelog](https://keepachangelog
 
 ## [Unreleased / v2.1.0] - 2026-11-09
 
+### 🗺️ Peta Geofence Presensi (`/admin/presensi/lokasi`)
+- **Penyelesaian Masalah Blokir Tile OpenStreetMap 403 (Tile Usage Policy)**:
+  - Mengganti tile provider default menjadi **Google Maps Tiles (Roadmap & Satelit Hybrid)** yang bebas blokir, sangat detail, dan akurat di seluruh pelosok Indonesia.
+  - Menghadirkan **Multi-Provider Tile Switcher** dengan menu dropdown mengambang:
+    1. 🗺️ **Google Maps (Jalan)** (Default cepat & jernih)
+    2. 🛰️ **Google Satelit (Hybrid)** (Foto udara tajam dengan label gedung & nama jalan)
+    3. 🏛️ **Esri World Street** (Peta topografi & jalan Esri ArcGIS)
+    4. 🌍 **OpenStreetMap (HOT)** (Tile server kemanusiaan OSM France, bebas blokir foundation)
+  - Menyediakan mekanisme **Auto-Fallback**: jika suatu tile server mengalami gangguan atau timeout, peta otomatis beralih ke layer alternatif tanpa memunculkan ubin error kuning 403.
+  - Menyimpan preferensi layer yang dipilih admin ke `localStorage` browser.
+  - Memperbarui sistem pencarian lokasi pencarian gedung/kota menggunakan **Photon Komoot API** dengan fallback ke Nominatim agar pencarian selalu berhasil tanpa terbentur limit OpenStreetMap.
+
+### 🏷️ Sistem Scanner Kiosk & Integrasi Multi-Metode RFID (`/scanner`)
+- **Integrasi Penuh Kartu RFID & Reader Keyboard Wedge**:
+  - Menyediakan fallback pencarian kartu RFID otomatis di backend (`findSiswaByQr` & `findGuruByQr`) melalui kolom `nomor_rfid`.
+  - Mendukung input mode eksplisit RFID (`rfid_value`) maupun auto-detect dari barcode scanner/RFID reader USB.
+  - Mengirimkan metadata `'metode' => 'rfid'|'qr'|'fp'` dalam payload respon presensi masuk dan pulang.
+- **Penyempurnaan Antarmuka Kiosk Scanner (`scanner_siswa_desktop.php`)**:
+  - Menghadirkan tombol saklar mode (*toggle*) RFID dan Fingerprint (*FP*) dengan status aktif visual bergelombang (`.active-scanner-tab`).
+  - Menambahkan lencana dinamis identifikasi metode presensi di Hero Result Card: lencana hijau bercahaya untuk **RFID** (`.badge-metode-rfid`), lencana biru untuk **QR CODE** (`.badge-metode-qr`), dan ungu untuk **FINGERPRINT** (`.badge-metode-fp`).
+  - Menambahkan animasi denyut cahaya kartu (*card glow animation* `.rfid-pulse`) pada bingkai foto profil saat presensi terverifikasi melalui kartu RFID.
+  - Memperbarui teks standby dan instruksi pemindai menjadi *"Silakan Scan QR / RFID / Sidik Jari"*.
+  - Menyelaraskan ikon pendukung menggunakan ikon Bootstrap Icons resmi (`bi-credit-card-2-front` dan `bi-fingerprint`).
+
 ### 🎨 Desain & UI/UX (Portal Siswa `/siswa/presensi`)
 - **Modernisasi Shell Aplikasi & Layout (`mobile_siswa.php`)**:
   - Membatasi wadah aplikasi ke ukuran mobile standar (`max-width: 480px`) di tengah layar (*centered*) dengan latar warna slate halus (`#f8fafc`).

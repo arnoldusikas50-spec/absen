@@ -284,6 +284,33 @@
         .kiosk-modal-backdrop.active {
             display: flex;
         }
+
+        /* RFID & Multi-Scanner Controls */
+        @keyframes rfidGlow {
+            0%, 100% { opacity: 0.85; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.06); filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6)); }
+        }
+        .rfid-pulse { animation: rfidGlow 2.5s ease-in-out infinite; }
+        .active-scanner-tab {
+            background: #10b981 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+        }
+        .badge-metode-rfid {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.4);
+        }
+        .badge-metode-qr {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+        }
+        .badge-metode-fp {
+            background: rgba(168, 85, 247, 0.2);
+            color: #c084fc;
+            border: 1px solid rgba(192, 132, 252, 0.4);
+        }
     </style>
     <?= \App\Libraries\Theme::styleTag() ?>
 </head>
@@ -524,35 +551,37 @@
                         <div class="md:col-span-7">
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 m-0">
-                                    <i class="bi bi-upc-scan text-rose-400"></i>
-                                    <span>Barcode / NIS</span>
-                                    <span id="rfid-mode-badge" class="ml-2 px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 text-[9px] font-bold border border-emerald-500/30 hidden">RFID AKTIF</span>
+                                    <i id="input-scanner-icon" class="bi bi-upc-scan text-rose-400"></i>
+                                    <span id="input-scanner-label">Barcode / NIS / RFID</span>
+                                    <span id="rfid-mode-badge" class="ml-2 px-2 py-0.5 rounded text-[9px] font-bold border hidden">RFID AKTIF</span>
                                 </label>
-
                             </div>
-                            <div class="relative">
+                            <div class="relative flex items-center">
                                 <input type="text" id="input-barcode-scanner" autofocus autocomplete="off"
-                                    placeholder="Tembak Barcode / Ketik NIS lalu Enter..."
-                                    class="w-full pl-9 pr-24 py-2.5 bg-slate-950/80 border border-slate-700 focus:bg-slate-900 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/30 rounded-xl text-xs font-semibold text-white placeholder:text-slate-500 transition-all">
+                                    placeholder="Tembak Barcode / Ketik NIS / Tempel RFID..."
+                                    class="w-full pl-9 pr-48 py-2.5 bg-slate-950/80 border border-slate-700 focus:bg-slate-900 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/30 rounded-xl text-xs font-semibold text-white placeholder:text-slate-500 transition-all">
                                 <i class="bi bi-keyboard absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none"></i>
-                                <button type="button" id="btn-barcode-proses"
-                                    class="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all">
-                                    Proses
-                                </button>
+                                
+                                <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                    <!-- Toggle Mode RFID (kartu RFID via keyboard wedge / Wiegand) -->
+                                    <button type="button" id="btn-toggle-rfid-mode"
+                                        class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all flex items-center gap-1"
+                                        title="Aktifkan mode khusus kartu RFID">
+                                        <i class="bi bi-credit-card-2-front"></i> <span>RFID</span>
+                                    </button>
 
-                                <!-- Toggle Mode RFID (kartu RFID via keyboard wedge / Wiegand ponte) -->
-                                <button type="button" id="btn-toggle-rfid-mode"
-                                    class="absolute right-72 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all"
-                                    title="Aktifkan mode kartu RFID (kirim sebagai rfid_value)">
-                                    <i class="bi bi-card-id"></i> RFID
-                                </button>
+                                    <!-- Toggle Mode Fingerprint -->
+                                    <button type="button" id="btn-toggle-fp-mode"
+                                        class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all flex items-center gap-1"
+                                        title="Aktifkan mode khusus sidik jari">
+                                        <i class="bi bi-fingerprint"></i> <span>FP</span>
+                                    </button>
 
-                                <!-- Toggle Mode Fingerprint (mesin sidik jari GEISA / keyboard wedge) -->
-                                <button type="button" id="btn-toggle-fp-mode"
-                                    class="absolute right-144 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all"
-                                    title="Aktifkan mode fingerprint (kirim sebagai fingerprint_uid)">
-                                    <i class="bi bi-fingerprint"></i> FP
-                                </button>
+                                    <button type="button" id="btn-barcode-proses"
+                                        class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all">
+                                        Proses
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -591,11 +620,14 @@
                 <div class="hero-result-card" id="hero-result-container">
                     <!-- Header Banner -->
                     <div id="hero-header-banner" class="p-3.5 bg-gradient-to-r from-slate-900 to-slate-950 text-white text-center transition-colors duration-300 border-b border-white/10">
-                        <span id="hero-badge-title" class="inline-block px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-slate-200 mb-1">
-                            STANDBY SCANNER
-                        </span>
+                        <div class="flex items-center justify-center gap-2 mb-1">
+                            <span id="hero-badge-title" class="inline-block px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-slate-200">
+                                STANDBY SCANNER
+                            </span>
+                            <span id="hero-metode-badge" class="hidden px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase"></span>
+                        </div>
                         <h5 id="hero-main-message" class="text-sm lg:text-base font-black font-outfit m-0 text-white">
-                            Silakan Scan Kartu QR Siswa / Guru
+                            Silakan Scan QR / RFID / Sidik Jari
                         </h5>
                     </div>
 
@@ -973,66 +1005,73 @@
             if (soundEnabled) playChime('success_in');
         };
 
-        // ── RFID MODE TOGGLE ──────────────────────────
-        function updateRfidModeUI() {
-            const $badge   = $('#rfid-mode-badge');
-            const $btn     = $('#btn-toggle-rfid-mode');
-            const $input   = $('#input-barcode-scanner');
+        // ── RFID & FINGERPRINT MODE CONTROLS ──────────
+        function updateScannerModeControls() {
+            const $badge      = $('#rfid-mode-badge');
+            const $btnRfid    = $('#btn-toggle-rfid-mode');
+            const $btnFp      = $('#btn-toggle-fp-mode');
+            const $input      = $('#input-barcode-scanner');
+            const $lblText    = $('#input-scanner-label');
+            const $lblIcon    = $('#input-scanner-icon');
+
             if (rfidMode) {
-                $badge.removeClass('hidden');
-                $btn.addClass('bg-emerald-500 text-white border-emerald-400').removeClass('bg-slate-800 text-slate-300 border-slate-600');
-                $input.attr('placeholder', 'Sentuh kartu RFID di reader…');
+                $badge.removeClass('hidden bg-purple-900/60 text-purple-200 border-purple-500/30')
+                      .addClass('bg-emerald-900/60 text-emerald-200 border-emerald-500/30')
+                      .html('<i class="bi bi-credit-card-2-front mr-1"></i> RFID AKTIF');
+                $btnRfid.addClass('active-scanner-tab').removeClass('bg-slate-800 text-slate-300 border-slate-600');
+                $btnFp.removeClass('active-scanner-tab').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                $lblText.text('Kartu RFID');
+                $lblIcon.attr('class', 'bi bi-credit-card-2-front text-emerald-400');
+                $input.attr('placeholder', 'Sentuh kartu RFID di scanner / reader…');
+            } else if (fpMode) {
+                $badge.removeClass('hidden bg-emerald-900/60 text-emerald-200 border-emerald-500/30')
+                      .addClass('bg-purple-900/60 text-purple-200 border-purple-500/30')
+                      .html('<i class="bi bi-fingerprint mr-1"></i> FP AKTIF');
+                $btnFp.addClass('active-scanner-tab').removeClass('bg-slate-800 text-slate-300 border-slate-600');
+                $btnRfid.removeClass('active-scanner-tab').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                $lblText.text('UserID Fingerprint');
+                $lblIcon.attr('class', 'bi bi-fingerprint text-purple-400');
+                $input.attr('placeholder', 'Tembak / ketik UserID sidik jari lalu Enter…');
             } else {
                 $badge.addClass('hidden');
-                $btn.removeClass('bg-emerald-500 text-white border-emerald-400').addClass('bg-slate-800 text-slate-300 border-slate-600');
-                $input.attr('placeholder', 'Tembak Barcode / Ketik NIS lalu Enter…');
+                $btnRfid.removeClass('active-scanner-tab').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                $btnFp.removeClass('active-scanner-tab').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                $lblText.text('Barcode / NIS / RFID');
+                $lblIcon.attr('class', 'bi bi-upc-scan text-rose-400');
+                $input.attr('placeholder', 'Tembak Barcode / Ketik NIS / Tempel RFID…');
             }
         }
+
         window.toggleRfidMode = function () {
             rfidMode = !rfidMode;
+            if (rfidMode) fpMode = false; // saling eksklusif untuk input teks
             localStorage.setItem('presensi_qr_rfid', rfidMode ? '1' : '0');
-            updateRfidModeUI();
+            localStorage.setItem('presensi_qr_fp', fpMode ? '1' : '0');
+            updateScannerModeControls();
             focusBarcodeGunInput();
             if (rfidMode) {
-                showHeroResult({ status: true, message: 'Mode Kartu RFID diaktifkan. Sentuh kartu RFID di reader.' }, scanMode);
+                showHeroResult({ status: true, message: 'Mode Kartu RFID diaktifkan. Tempelkan kartu pada reader.' }, scanMode);
                 setTimeout(resetHeroStandby, 1500);
             }
         };
-        updateRfidModeUI();
 
-        // ── Fingerprint MODE TOGGLE ─────────────────────────
         let fpMode = localStorage.getItem('presensi_qr_fp') === '1';
-        function updateFpModeUI() {
-            const $badge   = $('#rfid-mode-badge');
-            const $btn     = $('#btn-toggle-fp-mode');
-            const $input   = $('#input-barcode-scanner');
-            if (fpMode) {
-                $badge.removeClass('hidden').text('FINGERPRINT AKTIF')
-                    .removeClass('bg-emerald-900/60 text-emerald-200 border-emerald-500/30')
-                    .addClass('bg-purple-900/60 text-purple-200 border-purple-500/30');
-                $btn.addClass('bg-purple-500 text-white border-purple-400').removeClass('bg-slate-800 text-slate-300 border-slate-600');
-                $input.attr('placeholder', 'Ketik UserID fingerprint lalu Enter…');
-            } else {
-                $btn.removeClass('bg-purple-500 text-white border-purple-400').addClass('bg-slate-800 text-slate-300 border-slate-600');
-                if (!rfidMode) {
-                    $badge.addClass('hidden');
-                    $input.attr('placeholder', 'Tembak Barcode / Ketik NIS lalu Enter…');
-                } else {
-                    $input.attr('placeholder', 'Sentuh kartu RFID di reader…');
-                }
-            }
-        }
+
         window.toggleFpMode = function () {
             fpMode = !fpMode;
+            if (fpMode) rfidMode = false;
             localStorage.setItem('presensi_qr_fp', fpMode ? '1' : '0');
-            updateFpModeUI();
+            localStorage.setItem('presensi_qr_rfid', rfidMode ? '1' : '0');
+            updateScannerModeControls();
             focusBarcodeGunInput();
             if (fpMode) {
-                showHeroResult({ status: true, message: 'Mode Fingerprint diaktifkan. Ketik UserID mesin sidik jari.' }, scanMode);
+                showHeroResult({ status: true, message: 'Mode Sidik Jari diaktifkan. Masukkan ID fingerprint.' }, scanMode);
                 setTimeout(resetHeroStandby, 1500);
             }
         };
-        updateFpModeUI();
+
+        // Inisialisasi awal UI scanner mode
+        updateScannerModeControls();
 
         window.toggleVoiceSetting = function (checked) {
             voiceEnabled = !!checked;
@@ -1652,8 +1691,30 @@
             $('#hero-main-message').text(res.message || 'Presensi berhasil dicatat');
 
             const $foto = $('#hero-siswa-foto');
-            $foto.removeClass('hero-ring-masuk hero-ring-keluar hero-ring-warning hero-ring-error').addClass(cfg.ringClass);
+            $foto.removeClass('hero-ring-masuk hero-ring-keluar hero-ring-warning hero-ring-error rfid-pulse').addClass(cfg.ringClass);
             $('#hero-status-pill').attr('class', `absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase text-white shadow-sm border border-white/20 whitespace-nowrap ${cfg.statusBadgeBg}`);
+
+            // Tampilkan Badge Metode (RFID, QR, FP) jika scan berhasil atau dikenali
+            const $metodeBadge = $('#hero-metode-badge');
+            const metode = res.metode || (rfidMode ? 'rfid' : (fpMode ? 'fp' : 'qr'));
+            if (ok && metode) {
+                if (metode === 'rfid') {
+                    $metodeBadge.removeClass('hidden badge-metode-qr badge-metode-fp')
+                                .addClass('badge-metode-rfid')
+                                .html('<i class="bi bi-credit-card-2-front mr-1"></i> RFID').show();
+                    $foto.addClass('rfid-pulse');
+                } else if (metode === 'fp' || metode === 'fingerprint') {
+                    $metodeBadge.removeClass('hidden badge-metode-rfid badge-metode-qr')
+                                .addClass('badge-metode-fp')
+                                .html('<i class="bi bi-fingerprint mr-1"></i> FINGERPRINT').show();
+                } else {
+                    $metodeBadge.removeClass('hidden badge-metode-rfid badge-metode-fp')
+                                .addClass('badge-metode-qr')
+                                .html('<i class="bi bi-qr-code mr-1"></i> QR CODE').show();
+                }
+            } else {
+                $metodeBadge.addClass('hidden').hide();
+            }
 
             if (s) {
                 $foto.attr('src', s.foto || FOTO_CADANGAN);
@@ -1704,11 +1765,12 @@
 
         function resetHeroStandby() {
             $('#hero-header-banner').attr('class', 'p-3.5 bg-gradient-to-r from-slate-900 to-slate-950 text-white text-center transition-colors duration-300 border-b border-white/10');
-            $('#hero-badge-title').attr('class', 'inline-block px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-slate-200 mb-1').text('STANDBY SCANNER');
-            $('#hero-main-message').text('Silakan Scan Kartu QR Siswa / Guru');
+            $('#hero-badge-title').attr('class', 'inline-block px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-slate-200').text('STANDBY SCANNER');
+            $('#hero-metode-badge').addClass('hidden').hide();
+            $('#hero-main-message').text('Silakan Scan QR / RFID / Sidik Jari');
 
             $('#hero-siswa-foto').attr('src', FOTO_STANDBY)
-                .removeClass('hero-ring-masuk hero-ring-keluar hero-ring-warning hero-ring-error').addClass('hero-ring-masuk');
+                .removeClass('hero-ring-masuk hero-ring-keluar hero-ring-warning hero-ring-error rfid-pulse').addClass('hero-ring-masuk');
             $('#hero-status-pill').attr('class', 'absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase text-white shadow-sm border border-white/20 bg-slate-800 whitespace-nowrap').text('STANDBY');
             $('#hero-siswa-nama').text('Menunggu Scan...');
             $('#hero-siswa-kelas').html('<i class="bi bi-person-badge text-slate-400"></i> Kategori').show();
