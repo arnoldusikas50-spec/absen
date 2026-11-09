@@ -525,7 +525,8 @@
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 m-0">
                                     <i class="bi bi-upc-scan text-rose-400"></i>
-                                    <span>Barcode Scanner Gun USB / NIS</span>
+                                    <span>Barcode / NIS</span>
+                                    <span id="rfid-mode-badge" class="ml-2 px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 text-[9px] font-bold border border-emerald-500/30 hidden">RFID AKTIF</span>
                                 </label>
 
                             </div>
@@ -537,6 +538,20 @@
                                 <button type="button" id="btn-barcode-proses"
                                     class="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all">
                                     Proses
+                                </button>
+
+                                <!-- Toggle Mode RFID (kartu RFID via keyboard wedge / Wiegand ponte) -->
+                                <button type="button" id="btn-toggle-rfid-mode"
+                                    class="absolute right-72 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all"
+                                    title="Aktifkan mode kartu RFID (kirim sebagai rfid_value)">
+                                    <i class="bi bi-card-id"></i> RFID
+                                </button>
+
+                                <!-- Toggle Mode Fingerprint (mesin sidik jari GEISA / keyboard wedge) -->
+                                <button type="button" id="btn-toggle-fp-mode"
+                                    class="absolute right-144 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs border border-slate-600 shadow-xs transition-all"
+                                    title="Aktifkan mode fingerprint (kirim sebagai fingerprint_uid)">
+                                    <i class="bi bi-fingerprint"></i> FP
                                 </button>
                             </div>
                         </div>
@@ -757,6 +772,7 @@
 
         let soundEnabled    = localStorage.getItem('presensi_qr_sound') !== '0';
         let voiceEnabled    = localStorage.getItem('presensi_qr_voice') !== '0';
+        let rfidMode        = localStorage.getItem('presensi_qr_rfid') === '1';
         let audioCtx        = null;
 
         let heroResetTimer  = null;
@@ -956,6 +972,67 @@
             updateAudioIcons();
             if (soundEnabled) playChime('success_in');
         };
+
+        // ── RFID MODE TOGGLE ──────────────────────────
+        function updateRfidModeUI() {
+            const $badge   = $('#rfid-mode-badge');
+            const $btn     = $('#btn-toggle-rfid-mode');
+            const $input   = $('#input-barcode-scanner');
+            if (rfidMode) {
+                $badge.removeClass('hidden');
+                $btn.addClass('bg-emerald-500 text-white border-emerald-400').removeClass('bg-slate-800 text-slate-300 border-slate-600');
+                $input.attr('placeholder', 'Sentuh kartu RFID di reader…');
+            } else {
+                $badge.addClass('hidden');
+                $btn.removeClass('bg-emerald-500 text-white border-emerald-400').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                $input.attr('placeholder', 'Tembak Barcode / Ketik NIS lalu Enter…');
+            }
+        }
+        window.toggleRfidMode = function () {
+            rfidMode = !rfidMode;
+            localStorage.setItem('presensi_qr_rfid', rfidMode ? '1' : '0');
+            updateRfidModeUI();
+            focusBarcodeGunInput();
+            if (rfidMode) {
+                showHeroResult({ status: true, message: 'Mode Kartu RFID diaktifkan. Sentuh kartu RFID di reader.' }, scanMode);
+                setTimeout(resetHeroStandby, 1500);
+            }
+        };
+        updateRfidModeUI();
+
+        // ── Fingerprint MODE TOGGLE ─────────────────────────
+        let fpMode = localStorage.getItem('presensi_qr_fp') === '1';
+        function updateFpModeUI() {
+            const $badge   = $('#rfid-mode-badge');
+            const $btn     = $('#btn-toggle-fp-mode');
+            const $input   = $('#input-barcode-scanner');
+            if (fpMode) {
+                $badge.removeClass('hidden').text('FINGERPRINT AKTIF')
+                    .removeClass('bg-emerald-900/60 text-emerald-200 border-emerald-500/30')
+                    .addClass('bg-purple-900/60 text-purple-200 border-purple-500/30');
+                $btn.addClass('bg-purple-500 text-white border-purple-400').removeClass('bg-slate-800 text-slate-300 border-slate-600');
+                $input.attr('placeholder', 'Ketik UserID fingerprint lalu Enter…');
+            } else {
+                $btn.removeClass('bg-purple-500 text-white border-purple-400').addClass('bg-slate-800 text-slate-300 border-slate-600');
+                if (!rfidMode) {
+                    $badge.addClass('hidden');
+                    $input.attr('placeholder', 'Tembak Barcode / Ketik NIS lalu Enter…');
+                } else {
+                    $input.attr('placeholder', 'Sentuh kartu RFID di reader…');
+                }
+            }
+        }
+        window.toggleFpMode = function () {
+            fpMode = !fpMode;
+            localStorage.setItem('presensi_qr_fp', fpMode ? '1' : '0');
+            updateFpModeUI();
+            focusBarcodeGunInput();
+            if (fpMode) {
+                showHeroResult({ status: true, message: 'Mode Fingerprint diaktifkan. Ketik UserID mesin sidik jari.' }, scanMode);
+                setTimeout(resetHeroStandby, 1500);
+            }
+        };
+        updateFpModeUI();
 
         window.toggleVoiceSetting = function (checked) {
             voiceEnabled = !!checked;
@@ -1354,6 +1431,106 @@
             });
         }
 
+        // ── 7b. PROSES SCAN KARTU RFID ─────────────────
+        // Kirim UID kartu sebagai rfid_value (bukan qr_value) agar backend
+        // melakukan lookup di kolom nomor_rfid master_siswa / master_guru.
+        function processRfidScan(rfidValue) {
+            if (isProcessing || !rfidValue) return;
+            refreshModeTabs();
+            const gateMsg = modeBlockedMsg(scanMode);
+            if (gateMsg) {
+                showHeroResult({ status: false, message: gateMsg }, scanMode);
+                return;
+            }
+            isProcessing = true;
+            unlockAudio();
+
+            const filterVal = $('#select-kelas-filter').val();
+            const idKelas   = (filterVal === 'guru') ? 0 : (filterVal || 0);
+
+            const kioskToken = (function () { try { return localStorage.getItem('qr_kiosk_token') || ''; } catch (e) { return ''; } })();
+            $.ajax({
+                url: '<?= site_url("scanner/scan") ?>',
+                type: 'POST',
+                dataType: 'json',
+                headers: kioskToken ? { 'X-Kiosk-Token': kioskToken } : {},
+                data: {
+                    rfid_value: rfidValue,
+                    mode: scanMode,
+                    id_kelas: idKelas,
+                    lat: kioskLoc.lat,
+                    lng: kioskLoc.lng,
+                    accuracy: kioskLoc.accuracy,
+                    k: kioskToken || undefined
+                }
+            }).done(function (res) {
+                showHeroResult(res, scanMode);
+                loadHistoryFeed();
+            }).fail(function (xhr) {
+                let msg = 'Gagal memproses kartu RFID.';
+                try {
+                    const r = JSON.parse(xhr.responseText);
+                    if (r.message) msg = r.message;
+                } catch(e) {}
+                showHeroResult({ status: false, message: msg }, scanMode);
+            }).always(function () {
+                setTimeout(() => {
+                    isProcessing = false;
+                    focusBarcodeGunInput();
+                }, 1200);
+            });
+        }
+
+        // ── 7c. PROSES SCAN FINGERPRINT ─────────────────
+        // Kirim UID/UserID fingerprint sebagai fingerprint_uid (bukan qr_value)
+        // agar backend melakukan lookup di kolom fingerprint_uid.
+        function processFpScan(fpUid) {
+            if (isProcessing || !fpUid) return;
+            refreshModeTabs();
+            const gateMsg = modeBlockedMsg(scanMode);
+            if (gateMsg) {
+                showHeroResult({ status: false, message: gateMsg }, scanMode);
+                return;
+            }
+            isProcessing = true;
+            unlockAudio();
+
+            const filterVal = $('#select-kelas-filter').val();
+            const idKelas   = (filterVal === 'guru') ? 0 : (filterVal || 0);
+
+            const kioskToken = (function () { try { return localStorage.getItem('qr_kiosk_token') || ''; } catch (e) { return ''; } })();
+            $.ajax({
+                url: '<?= site_url("scanner/scan") ?>',
+                type: 'POST',
+                dataType: 'json',
+                headers: kioskToken ? { 'X-Kiosk-Token': kioskToken } : {},
+                data: {
+                    fingerprint_uid: fpUid,
+                    mode: scanMode,
+                    id_kelas: idKelas,
+                    lat: kioskLoc.lat,
+                    lng: kioskLoc.lng,
+                    accuracy: kioskLoc.accuracy,
+                    k: kioskToken || undefined
+                }
+            }).done(function (res) {
+                showHeroResult(res, scanMode);
+                loadHistoryFeed();
+            }).fail(function (xhr) {
+                let msg = 'Gagal memproses fingerprint.';
+                try {
+                    const r = JSON.parse(xhr.responseText);
+                    if (r.message) msg = r.message;
+                } catch(e) {}
+                showHeroResult({ status: false, message: msg }, scanMode);
+            }).always(function () {
+                setTimeout(() => {
+                    isProcessing = false;
+                    focusBarcodeGunInput();
+                }, 1200);
+            });
+        }
+
         // ── 8. HERO RESULT LIVE CARD ─────────────────
         function showHeroResult(res, currentMode) {
             const ok   = res.status === true;
@@ -1551,7 +1728,17 @@
             const val = $('#input-barcode-scanner').val().trim();
             if (!val) return;
             $('#input-barcode-scanner').val('');
-            processAttendanceScan(val);
+            // Mode Fingerprint: kirim sebagai fingerprint_uid agar backend
+            // melakukan lookup di kolom fingerprint_uid master_siswa / master_guru.
+            if (fpMode) {
+                processFpScan(val);
+            }
+            // Mode RFID: kirim sebagai rfid_value.
+            else if (rfidMode) {
+                processRfidScan(val);
+            } else {
+                processAttendanceScan(val);
+            }
         };
 
         $('#input-barcode-scanner').on('keydown', function (e) {
@@ -1676,6 +1863,8 @@
         $('#btn-desktop-pause').on('click', toggleCameraPause);
         $('#btn-retry-cam').on('click', initDesktopCamera);
         $('#btn-barcode-proses').on('click', submitBarcodeGunInput);
+        $('#btn-toggle-rfid-mode').on('click', toggleRfidMode);
+        $('#btn-toggle-fp-mode').on('click', toggleFpMode);
         $('#btn-refresh-feed').on('click', loadHistoryFeed);
         $('#setting-sound-chime').on('change', function () { toggleSoundSetting(this.checked); });
         $('#setting-voice-tts').on('change', function () { toggleVoiceSetting(this.checked); });

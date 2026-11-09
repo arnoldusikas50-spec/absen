@@ -373,6 +373,10 @@ class Dataguru extends BaseController
         'tempat_lahir' => 50, 'tgl_lahir' => 10, 'alamat_jalan' => 255,
         'kecamatan' => 50, 'kabupaten' => 50, 'provinsi' => 50, 'kode_pos' => 10,
         'telegram_id' => 50,
+        // UID kartu RFID (dicetak pada kartu fisik, diisi manual admin).
+        'nomor_rfid'  => 64,
+        // UserID mesin sidik jari (GEISA GX330), diisi manual admin.
+        'fingerprint_uid' => 64,
     ];
 
     /** Nilai resmi status kepegawaian yang boleh tersimpan. */

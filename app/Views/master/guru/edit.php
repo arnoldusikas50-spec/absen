@@ -377,6 +377,24 @@ if ($jabatan === '') $jabatan = 'Guru / Tenaga Kependidikan';
                                     </div>
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
+                                            <label for="f-nomor_rfid" class="form-label-tw">Nomor Kartu RFID</label>
+                                            <div class="relative">
+                                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"><i class="bi bi-card-id"></i></span>
+                                                <input type="text" id="f-nomor_rfid" name="nomor_rfid" inputmode="text" value="<?= $v($mapProf, 'nomor_rfid') ?>" class="form-control-tw pl-9 font-mono text-uppercase" placeholder="04A1B2C3D" maxlength="64" autocomplete="off">
+                                            </div>
+                                            <p class="field-msg" data-msg-for="f-nomor_rfid"></p>
+                                            <p class="text-[11px] text-slate-400 mt-1 mb-0">UID kartu RFID guru/GTK (dicetak pada kartu fisik). Kosongkan bila tidak pakai RFID.</p>
+                                        </div>
+                                        <div>
+                                            <label for="f-fingerprint_uid" class="form-label-tw">UserID Mesin Sidik Jari</label>
+                                            <div class="relative">
+                                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"><i class="bi bi-fingerprint"></i></span>
+                                                <input type="text" id="f-fingerprint_uid" name="fingerprint_uid" inputmode="text" value="<?= $v($mapProf, 'fingerprint_uid') ?>" class="form-control-tw pl-9 font-mono" placeholder="1001" maxlength="64" autocomplete="off">
+                                            </div>
+                                            <p class="field-msg" data-msg-for="f-fingerprint_uid"></p>
+                                            <p class="text-[11px] text-slate-400 mt-1 mb-0">UserID yang terdaftar di mesin sidik jari GEISA GX330. Kosongkan bila tidak pakai fingerprint.</p>
+                                        </div>
+                                        <div>
                                             <label for="f-telegram_id" class="form-label-tw">ID Telegram</label>
                                             <div class="relative">
                                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"><i class="bi bi-telegram"></i></span>

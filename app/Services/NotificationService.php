@@ -1875,6 +1875,8 @@ class NotificationService
     {
         $totalDenda   = number_format((float) ($data['total_denda'] ?? 0), 0, ',', '.');
         $totalDibayar = number_format((float) ($data['total_dibayar'] ?? 0), 0, ',', '.');
+        $totalCash    = number_format((float) ($data['total_cash'] ?? 0), 0, ',', '.');
+        $totalPoin    = number_format((float) ($data['total_poin'] ?? 0), 0, ',', '.');
         $sisa         = number_format((float) ($data['sisa'] ?? 0), 0, ',', '.');
 
         $msg = "💰 <b>REKAP DENDA MINGGUAN</b>\n"
@@ -1882,33 +1884,12 @@ class NotificationService
              . "─────────────────\n"
              . "Timbul minggu ini: Rp {$totalDenda}\n"
              . "Dibayar minggu ini: Rp {$totalDibayar}\n"
+             . "  💵 Cash: Rp {$totalCash}\n"
+             . "  💳 Poin: Rp {$totalPoin}\n"
              . "Sisa akumulasi: Rp {$sisa}\n"
-             . "─────────────────\n";
+             . "─────────────────";
 
-        // Tampilkan guru yang masih punya sisa denda (max 20 agar pesan tidak terlalu panjang)
-        $withSisa = array_filter($details, static fn($d) => ((float) ($d['sisa'] ?? 0)) > 0);
-        if (!empty($withSisa)) {
-            $msg .= "<b>Guru dengan sisa denda:</b>\n";
-            $count = 0;
-            foreach ($withSisa as $d) {
-                if ($count >= 20) {
-                    $remaining = count($withSisa) - 20;
-                    $msg .= "... dan {$remaining} guru lainnya\n";
-                    break;
-                }
-                $nama  = $d['nama'] ?? 'Guru';
-                $sDenda = number_format((float) ($d['total_denda'] ?? 0), 0, ',', '.');
-                $sBayar = number_format((float) ($d['total_dibayar'] ?? 0), 0, ',', '.');
-                $sSisa  = number_format((float) ($d['sisa'] ?? 0), 0, ',', '.');
-                $msg .= "• " . $this->plain((string) $nama) . ": Rp {$sSisa}\n";
-                $count++;
-            }
-        } else {
-            $msg .= "✅ Semua denda telah lunas.\n";
-        }
-
-         $msg .= "─────────────────";
-         return $this->notifyGrup('rekap_denda_mingguan', $msg);
+        return $this->notifyGrup('rekap_denda_mingguan', $msg);
     }
 
     /**

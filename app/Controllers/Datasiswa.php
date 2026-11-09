@@ -508,6 +508,10 @@ class Datasiswa extends BaseController
         'nama_wali' => 100, 'nohp_wali' => 20, 'pendidikan_wali' => 50,
         'pekerjaan_wali' => 50, 'alamat_wali' => 255,
         'tahun_masuk' => 10, 'kelas_awal' => 50, 'sekolah_asal' => 100,
+        // UID kartu RFID (dicetak pada kartu fisik, diisi manual admin).
+        'nomor_rfid'  => 64,
+        // UserID mesin sidik jari (GEISA GX330), diisi manual admin.
+        'fingerprint_uid' => 64,
     ];
 
     public function updateData()

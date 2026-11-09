@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="<?= \App\Libraries\Theme::metaColor('siswa') ?>">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Presensi Siswa">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="application-name" content="Presensi Siswa">
+    <meta name="description" content="Aplikasi presensi siswa: status kehadiran, statistik bulanan, dan kartu QR digital.">
 
+    <link rel="manifest" href="<?= base_url('manifest.json') ?>">
+    <link rel="apple-touch-icon" href="<?= base_url('icons/apple-touch-icon.png') ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= base_url('icons/apple-touch-icon.png') ?>">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= base_url('icons/icon-192.png') ?>">
+    <link rel="icon" type="image/png" sizes="512x512" href="<?= base_url('icons/icon-512.png') ?>">
     <link rel="icon" type="image/x-icon" href="<?= base_url('favicon.ico') ?>">
+
     <title><?= $title ?? 'Presensi' ?> - Siswa</title>
 
     <!-- Google Fonts: Plus Jakarta Sans + Outfit -->
@@ -22,11 +32,6 @@
     <link rel="stylesheet" href="<?= base_url('assets/plugins/sweetalert2/sweetalert2.min.css') ?>">
 
     <style>
-        /* Utility spasi logis Bootstrap yang dipakai view mobile. */
-        .me-0 { margin-right: 0; } .me-1 { margin-right: .25rem; } .me-2 { margin-right: .5rem; } .me-3 { margin-right: 1rem; }
-        .ms-1 { margin-left: .25rem; } .ms-2 { margin-left: .5rem; } .ms-3 { margin-left: 1rem; } .ms-auto { margin-left: auto; }
-        .pe-2 { padding-right: .5rem; } .ps-1 { padding-left: .25rem; }
-
         /* ── App shell ─────────────────────────────────────────── */
         .app-container {
             max-width: 480px;
@@ -37,7 +42,7 @@
             position: relative;
             background-color: #f8fafc;
             box-shadow: 0 0 40px rgba(0,0,0,0.04);
-            padding-bottom: calc(var(--bottom-nav-offset, 80px) + var(--safe-area-inset-bottom, 0px));
+            padding-bottom: calc(var(--bottom-nav-offset, 108px) + var(--safe-area-inset-bottom, 0px));
         }
         .top-app-bar {
             display: flex;
@@ -52,77 +57,149 @@
         }
         .top-app-bar.scrolled { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
 
-        /* ── Bottom nav ────────────────────────────────────────── */
+        /* ── Bottom nav: floating pill ─────────────────────────── */
         .bottom-nav {
             position: fixed;
-            bottom: 0;
+            bottom: calc(10px + var(--safe-area-inset-bottom, 0px) * 0.5);
             left: 50%;
             transform: translateX(-50%);
-            width: 100%;
-            max-width: 480px;
+            width: calc(100% - 24px);
+            max-width: 456px;
             z-index: 2000;
             display: flex;
             justify-content: space-around;
             align-items: center;
-            padding: 0 10px;
-            height: calc(66px + var(--safe-area-inset-bottom, 0px));
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
-            border-top: 1px solid rgba(226, 232, 240, 0.8);
-            padding-bottom: var(--safe-area-inset-bottom, 0px);
+            height: 68px;
+            padding: 0 8px;
+            border-radius: 26px;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow:
+                0 24px 48px -24px rgba(15, 23, 42, 0.35),
+                0 2px 10px rgba(15, 23, 42, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
         }
         .nav-item {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             text-decoration: none;
             position: relative;
             flex: 1;
-            padding-top: 6px;
-            transition: all 0.25s ease;
-            color: #64748b;
+            padding: 4px 0;
+            transition: color 0.22s ease;
+            color: #94a3b8;
+            -webkit-tap-highlight-color: transparent;
         }
-        .nav-item i {
+        /* Chip ikon — wadah pill yang membesar saat aktif */
+        .nav-icon-wrap {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 12px;
-            font-size: 1.35rem;
-            width: 44px;
-            height: 30px;
-            transition: all 0.25s ease;
-        }
-        .nav-item.active { color: var(--accent-600); }
-        .nav-item.active i { background: var(--accent-100); color: var(--accent-600); font-weight: 800; }
-        .nav-label { font-weight: 700; margin-top: 3px; font-size: 10px; letter-spacing: 0.2px; }
-
-        .nav-item-center {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-decoration: none;
-            position: relative;
-            flex: 1;
-            margin-top: -18px;
-        }
-        .nav-center-bubble {
-            width: 48px;
-            height: 48px;
+            width: 50px;
+            height: 32px;
             border-radius: 16px;
-            background: linear-gradient(135deg, var(--indigo-600) 0%, var(--accent-600) 100%);
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.35rem;
-            box-shadow: 0 8px 18px rgb(var(--accent-600-rgb) / 0.35);
-            border: 3px solid #ffffff;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            background: transparent;
+            transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        .nav-center-bubble:active { transform: scale(0.92); box-shadow: 0 4px 10px rgb(var(--accent-600-rgb) / 0.25); }
-        .nav-label-center { font-weight: 800; margin-top: 3px; font-size: 10px; letter-spacing: 0.2px; color: var(--accent-700); }
+        /* Ikon SVG nav: garis tipis (outline) → terisi duotone saat aktif */
+        .nav-ico {
+            display: block;
+            width: 23px;
+            height: 23px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.75;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke-width .25s ease;
+        }
+        .nav-ico .duo {
+            fill: currentColor;
+            fill-opacity: 0;
+            transition: fill-opacity .25s ease;
+        }
+        .nav-item.active .nav-ico { stroke-width: 1.95; }
+        .nav-item.active .nav-ico .duo { fill-opacity: .18; }
+        .nav-center-btn .nav-ico { width: 28px; height: 28px; stroke-width: 1.85; }
+        .nav-center-btn .nav-ico .duo { fill: #fff; fill-opacity: .28; }
+        .nav-label { font-weight: 700; margin-top: 3px; font-size: 10px; letter-spacing: 0.2px; color: #64748b; transition: color 0.22s ease; }
+        .nav-item.active { color: var(--accent-600); }
+        .nav-item.active .nav-label { color: var(--accent-600); }
+        .nav-item.active .nav-icon-wrap {
+            background: linear-gradient(135deg, rgb(var(--accent-600-rgb) / 0.15) 0%, rgb(var(--accent-500-rgb) / 0.10) 55%, rgb(var(--indigo-600-rgb, 79, 70, 229) / 0.18) 100%);
+            box-shadow: inset 0 0 0 1px rgb(var(--accent-600-rgb) / 0.14), 0 10px 18px -12px rgb(var(--accent-600-rgb) / 0.6);
+        }
+        .nav-item:active .nav-icon-wrap { transform: scale(0.9); }
+
+        @media (hover: hover) {
+            .nav-item:hover { color: #64748b; }
+            .nav-item:hover .nav-icon-wrap { background: rgba(15, 23, 42, 0.05); }
+            .nav-item.active:hover { color: var(--accent-600); }
+            .nav-item.active:hover .nav-icon-wrap { background: linear-gradient(135deg, rgb(var(--accent-600-rgb) / 0.20) 0%, rgb(var(--accent-500-rgb) / 0.14) 55%, rgb(var(--indigo-600-rgb, 79, 70, 229) / 0.22) 100%); }
+        }
+
+        .nav-center-btn {
+            position: absolute;
+            top: -24px;
+            width: 56px; height: 56px;
+            border-radius: 20px;
+            background: linear-gradient(140deg, var(--indigo-600, #4f46e5) 0%, var(--accent-600) 55%, var(--accent-500) 100%);
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 14px 28px -10px rgb(var(--accent-600-rgb) / 0.55), 0 3px 8px rgb(var(--accent-600-rgb) / 0.22);
+            border: 3px solid #fff;
+            overflow: hidden;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+        }
+        /* Kilap lembut di tepi atas tombol QR */
+        .nav-center-btn::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 55%);
+            pointer-events: none;
+        }
+        .nav-item:active .nav-center-btn { transform: scale(0.92) translateY(2px); box-shadow: 0 6px 14px -6px rgb(var(--accent-600-rgb) / 0.45); }
+        .nav-item-center { position: relative; }
+        .nav-label-center { margin-top: 38px; color: var(--accent-700); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .nav-icon-wrap, .nav-center-btn, .nav-item { transition: none; }
+            .nav-ico, .nav-ico .duo { transition: none; }
+            .nav-item:active .nav-icon-wrap, .nav-item:active .nav-center-btn { transform: none; }
+        }
+
+        /* ── Pelengkap utility ───────────────────────────────── */
+        .shadow-2xs      { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); }
+        .shadow-xs       { box-shadow: 0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04); }
+        .drop-shadow-xs  { filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08)); }
+        .active\:scale-98:active     { transform: scale(0.98); }
+        .focus\:outline-hidden:focus { outline: 2px solid transparent; outline-offset: 2px; }
+        .animate-spin-slow           { animation: spin 2.4s linear infinite; }
+        .flex-2            { flex: 2 1 0%; }
+        .border-3          { border-width: 3px; }
+
+        /* Utility spasi logis Bootstrap yang dipakai view mobile. */
+        .me-0 { margin-right: 0; } .me-1 { margin-right: .25rem; } .me-2 { margin-right: .5rem; } .me-3 { margin-right: 1rem; }
+        .ms-1 { margin-left: .25rem; } .ms-2 { margin-left: .5rem; } .ms-3 { margin-left: 1rem; } .ms-auto { margin-left: auto; }
+        .pe-2 { padding-right: .5rem; } .ps-1 { padding-left: .25rem; }
+
+        @media (hover: hover) {
+            .hover\:bg-amber-50\/60:hover   { background-color: rgba(255, 251, 235, 0.6); }
+            .hover\:bg-rose-50\/60:hover    { background-color: rgba(255, 241, 242, 0.6); }
+            .hover\:bg-purple-50\/60:hover  { background-color: rgba(250, 245, 255, 0.6); }
+            .hover\:border-indigo-300:hover { border-color: #a5b4fc; }
+            .hover\:border-teal-300:hover   { border-color: #5eead4; }
+        }
+
+        /* iOS Safari auto-zoom saat input fokus */
+        .app-container input:not([type="hidden"]),
+        .app-container select,
+        .app-container textarea { font-size: 16px; }
 
         /* ── Cards ─────────────────────────────────────────────── */
         .m3-card {
@@ -180,6 +257,7 @@
         .badge-primary   { background: var(--primary-100); color: var(--primary-700); }
         .badge-secondary { background: #f1f5f9; color: #475569; }
         .badge-purple    { background: #f3e8ff; color: #7e22ce; }
+        .badge-primary-subtle { background: rgb(var(--accent-600-rgb) / 0.08); }
 
         /* ── Form ──────────────────────────────────────────────── */
         .m3-input {
@@ -188,8 +266,6 @@
             padding: 0.55rem 0.85rem; font-size: 0.8125rem;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
-        /* Ruang ikon di dalam input: shorthand padding .m3-input (unlayered)
-           mengalahkan .pl-*/.pr-* Tailwind (layered) — kunci via spesifisitas. */
         .m3-input.pl-8  { padding-left: 2rem; }
         .m3-input.pl-9  { padding-left: 2.5rem; }
         .m3-input.pl-10 { padding-left: 2.75rem; }
@@ -215,7 +291,7 @@
 
         /* ── Modal bottom-sheet ────────────────────────────────── */
         .tw-modal {
-            position: fixed; inset: 0; z-index: 1050;
+            position: fixed; inset: 0; z-index: 3500;
             display: none; align-items: flex-end; justify-content: center;
             background: rgba(15,23,42,0.55);
             backdrop-filter: blur(3px);
@@ -255,6 +331,54 @@
             color: var(--accent-600); font-size: 1.25rem;
         }
         .empty-state { text-align: center; padding: 40px 20px; color: #94a3b8; }
+        .empty-state > i { font-size: 2rem; display: block; margin: 0 auto 8px; }
+        .empty-state h6  { font-size: 15px; font-weight: 700; color: #475569; margin: 0 0 2px; }
+
+        /* SweetAlert di atas bottom-nav (z 2000) */
+        .swal2-container { z-index: 4000 !important; }
+
+        /* ── SweetAlert2: brand theme (semua popup /siswa) ── */
+        .swal2-popup {
+            border-radius: 26px !important;
+            padding: 1.5rem 1.25rem 1.25rem !important;
+            font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important;
+            box-shadow: 0 24px 64px rgba(15,23,42,.22) !important;
+        }
+        .swal2-title {
+            font-weight: 800 !important; color: #1e293b !important;
+            font-size: 1.15rem !important; letter-spacing: -.3px !important;
+            padding-top: .25em !important;
+        }
+        .swal2-html-container { color: #64748b !important; font-size: .85rem !important; line-height: 1.6 !important; }
+        .swal2-icon { border-width: 2.5px !important; margin: .6em auto 1em !important; transform: scale(.92); }
+        .swal2-icon.swal2-warning { border-color: #fed7aa !important; color: #f59e0b !important; }
+        .swal2-icon.swal2-success { border-color: #a7f3d0 !important; color: #10b981 !important; }
+        .swal2-icon.swal2-success [class^=swal2-success-line] { background-color: #10b981 !important; }
+        .swal2-icon.swal2-success .swal2-success-ring { border-color: #a7f3d0 !important; }
+        .swal2-icon.swal2-error { border-color: #fecaca !important; color: #ef4444 !important; }
+        .swal2-icon.swal2-error [class^=swal2-x-mark-line] { background-color: #ef4444 !important; }
+        .swal2-icon.swal2-info, .swal2-icon.swal2-question { border-color: var(--accent-200, #c7d2fe) !important; color: var(--accent-600) !important; }
+        .swal2-actions { gap: 8px !important; width: 100% !important; margin-top: 1.1em !important; }
+        .swal2-styled.swal2-confirm {
+            background: var(--accent-600) !important; border-radius: 9999px !important;
+            font-weight: 800 !important; padding: .65em 1.7em !important;
+            box-shadow: 0 6px 16px rgb(var(--accent-600-rgb) / .32) !important;
+        }
+        .swal2-styled.swal2-cancel {
+            background: #f1f5f9 !important; color: #64748b !important; border-radius: 9999px !important;
+            font-weight: 700 !important; padding: .65em 1.7em !important;
+        }
+        .swal2-styled:focus { box-shadow: 0 0 0 3px rgb(var(--accent-600-rgb) / .18) !important; }
+        .swal2-input, .swal2-textarea {
+            border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important;
+            font-size: .85rem !important; color: #1e293b !important;
+        }
+        .swal2-input:focus, .swal2-textarea:focus {
+            border-color: var(--accent-600) !important; box-shadow: 0 0 0 3px rgb(var(--accent-600-rgb) / .12) !important;
+        }
+        .swal2-validation-message { border-radius: 12px !important; font-size: .78rem !important; }
+        .swal2-timer-progress-bar { background: rgb(var(--accent-600-rgb) / .35) !important; }
+
         .pulse-dot {
             position: relative; display: inline-flex;
             border-radius: 9999px; width: 8px; height: 8px;
@@ -273,9 +397,9 @@
     </style>
     <style>
         :root {
-            --m3-primary: var(--brand-600);
+            --m3-primary: var(--accent-600);
             --m3-on-primary: #FFFFFF;
-            --m3-primary-container: var(--brand-100);
+            --m3-primary-container: var(--accent-100);
             --m3-on-primary-container: #880022;
             --m3-secondary: #625B71;
             --m3-on-secondary: #FFFFFF;
@@ -301,30 +425,60 @@
     <?= \App\Libraries\Theme::styleTag() ?>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 antialiased selection:bg-violet-500 selection:text-white">
-    <div class="app-container" style="--bottom-nav-offset: <?= !empty($hideBottomNav) ? '0px' : '80px' ?>;">
+    <div class="app-container" style="--bottom-nav-offset: <?= !empty($hideBottomNav) ? '0px' : '108px' ?>;">
         <?= $this->renderSection('content') ?>
 
         <?php if (empty($hideBottomNav)): ?>
-        <nav class="bottom-nav">
-            <a href="<?= site_url('siswa/presensi') ?>" class="nav-item <?= uri_string() == 'siswa/presensi' ? 'active' : '' ?>">
-                <i class="bi bi-house"></i>
+        <?php
+            $navUri   = uri_string();
+            $navHome  = ($navUri === 'siswa/presensi');
+            $navRiwayat = strpos($navUri, 'riwayat') !== false;
+        ?>
+        <nav class="bottom-nav" aria-label="Navigasi utama siswa">
+            <!-- Beranda -->
+            <a href="<?= site_url('siswa/presensi') ?>" class="nav-item <?= $navHome ? 'active' : '' ?>" <?= $navHome ? 'aria-current="page"' : '' ?>>
+                <span class="nav-icon-wrap">
+                    <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+                        <path class="duo" d="M3.6 10.4 12 3.6l8.4 6.8V19a2.4 2.4 0 0 1-2.4 2.4H6A2.4 2.4 0 0 1 3.6 19z"/>
+                        <path d="M9.6 21.4v-5.3a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1v5.3"/>
+                    </svg>
+                </span>
                 <span class="nav-label">Beranda</span>
             </a>
 
-            <a href="javascript:void(0)" onclick="typeof openStudentQrModal === 'function' ? openStudentQrModal() : (location.href='<?= site_url('siswa/presensi') ?>#qr')" class="nav-item-center" id="nav-btn-student-qr">
-                <div class="nav-center-bubble">
-                    <i class="bi bi-qr-code-scan"></i>
-                </div>
-                <span class="nav-label-center">Kartu QR</span>
-            </a>
-
+            <!-- Riwayat -->
             <a href="<?= site_url('siswa/presensi') ?>#riwayat" class="nav-item">
-                <i class="bi bi-clock-history"></i>
+                <span class="nav-icon-wrap">
+                    <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle class="duo" cx="12" cy="12" r="8.6"/>
+                        <path d="M12 7.3v4.9l3.4 2"/>
+                    </svg>
+                </span>
                 <span class="nav-label">Riwayat</span>
             </a>
 
-            <a href="<?= site_url('auth/logout') ?>" class="nav-item">
-                <i class="bi bi-box-arrow-right"></i>
+            <!-- Kartu QR — tengah melayang -->
+            <a href="javascript:void(0)" onclick="typeof openStudentQrModal === 'function' ? openStudentQrModal() : (location.href='<?= site_url('siswa/presensi') ?>#qr')" class="nav-item nav-item-center" id="nav-btn-student-qr" aria-label="Buka kartu QR presensi">
+                <span class="nav-center-btn">
+                    <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect class="duo" x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect class="duo" x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect class="duo" x="3" y="14" width="7" height="7" rx="1"/>
+                        <path d="M14 14h2v2h-2zM18 14h3v3h-3zM14 18v3M18 20h3"/>
+                    </svg>
+                </span>
+                <span class="nav-label nav-label-center">Kartu QR</span>
+            </a>
+
+            <!-- Keluar -->
+            <a href="<?= site_url('auth/logout') ?>" class="nav-item" onclick="return confirm('Yakin ingin keluar?')">
+                <span class="nav-icon-wrap">
+                    <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">
+                        <path class="duo" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                </span>
                 <span class="nav-label">Keluar</span>
             </a>
         </nav>
@@ -352,7 +506,6 @@
                             icon: 'warning',
                             title: 'Akses Ditolak',
                             text: '<?= addslashes($flashError) ?>',
-                            confirmButtonColor: '#6366f1',
                             confirmButtonText: 'Mengerti'
                         });
                     } else {
@@ -364,7 +517,6 @@
                             icon: 'warning',
                             title: 'Peringatan',
                             text: '<?= addslashes($flashWarning) ?>',
-                            confirmButtonColor: '#f59e0b',
                             confirmButtonText: 'Mengerti'
                         });
                     } else {
@@ -376,7 +528,6 @@
                             icon: 'success',
                             title: 'Berhasil',
                             text: '<?= addslashes($flashSuccess) ?>',
-                            confirmButtonColor: '#10b981',
                             confirmButtonText: 'OK',
                             timer: 3000,
                             timerProgressBar: true
@@ -388,7 +539,6 @@
                             icon: 'info',
                             title: 'Informasi',
                             text: '<?= addslashes($flashMessage) ?>',
-                            confirmButtonColor: '#6366f1',
                             confirmButtonText: 'OK'
                         });
                     }
@@ -404,7 +554,7 @@
     </script>
 
     <script>
-        // Common JS for Mobile App (tanpa Bootstrap)
+        // Common JS for Mobile Siswa
         $(window).scroll(function() {
             if ($(this).scrollTop() > 10) {
                 $('.top-app-bar').addClass('scrolled');

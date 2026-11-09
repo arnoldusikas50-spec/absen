@@ -112,6 +112,88 @@ class Presensi extends BaseController
         return $out;
     }
 
+    /**
+     * Rangkuman denda siswa untuk satu bulan — angka yang sama dengan kolom
+     * "Denda" di rekap admin (SiswaDendaService::ringkasBulan).
+     *
+     * @return array{brutto:float, netto:float, perBulan:array, cap:?float,
+     *               alpha:int, bolos:int, tanpa_baris:int}|null
+     */
+    private function infoDendaBulan(int $idSiswa, int $idKelas, string $yyyymm): ?array
+    {
+        $db = \Config\Database::connect();
+        if (!$db->tableExists('presensi_siswa')) return null;
+
+        [$tahun, $bulan] = array_map('intval', explode('-', $yyyymm, 2));
+        $awal  = $yyyymm . '-01';
+        $akhir = date('Y-m-t', strtotime($awal));
+
+        // Semua baris presensi siswa di bulan ini (sertakan kolom denda bila ada).
+        $mapBySiswa = [];
+        $kolom = 'id, id_siswa, id_kelas, tgl, status, jam_masuk, jam_keluar, denda, denda_jenis';
+        if ($db->fieldExists('pulang_tidak_tercatat', 'presensi_siswa')) {
+            $kolom .= ', pulang_tidak_tercatat';
+        }
+        try {
+            $rows = $db->table('presensi_siswa')->select($kolom)
+                ->where('id_siswa', $idSiswa)
+                ->where('tgl >=', $awal)
+                ->where('tgl <=', $akhir)
+                ->get()->getResult();
+            foreach ($rows as $r) {
+                $mapBySiswa[(int) ($r->id_siswa ?? 0)][substr((string) ($r->tgl ?? ''), 0, 10)] = $r;
+            }
+        } catch (\Throwable $e) {
+            log_message('error', '[Siswa\\Presensi::infoDendaBulan] baca baris: ' . $e->getMessage());
+            return null;
+        }
+
+        // Hari mana kelas ini sudah tercatat presensinya (patokan alpha tanpa baris).
+        $tercatatByKelas = [];
+        if ($idKelas > 0) {
+            try {
+                $trows = $db->table('presensi_siswa')
+                    ->select('id_kelas, tgl')
+                    ->where('id_kelas', $idKelas)
+                    ->where('tgl >=', $awal)
+                    ->where('tgl <=', $akhir)
+                    ->get()->getResult();
+                foreach ($trows as $tr) {
+                    $tercatatByKelas[(int) ($tr->id_kelas ?? 0)][substr((string) ($tr->tgl ?? ''), 0, 10)] = true;
+                }
+            } catch (\Throwable $e) {
+                log_message('error', '[Siswa\\Presensi::infoDendaBulan] peta tercatat: ' . $e->getMessage());
+            }
+        }
+
+        // Peta BDR kelas (opsional; null dihitung internal oleh service).
+        $bdrByKelas = null;
+        if ($idKelas > 0) {
+            try {
+                $bdrSvc = new \App\Services\PresensiBdrService();
+                $bdrByKelas = [$idKelas => $bdrSvc->tanggalUntukKelas($awal, $akhir, $idKelas)];
+            } catch (\Throwable $e) {
+                log_message('error', '[Siswa\\Presensi::infoDendaBulan] bdr: ' . $e->getMessage());
+            }
+        }
+
+        try {
+            $dendaSvc = new \App\Services\SiswaDendaService();
+            $ringkas = $dendaSvc->ringkasBulan([
+                'bulan'      => $bulan,
+                'tahun'      => $tahun,
+                'students'   => [['id_siswa' => $idSiswa, 'id_kelas' => $idKelas]],
+                'mapBySiswa' => $mapBySiswa,
+                'bdrByKelas' => $bdrByKelas,
+                'tercatatByKelas' => $tercatatByKelas,
+            ]);
+            return $ringkas[$idSiswa] ?? null;
+        } catch (\Throwable $e) {
+            log_message('error', '[Siswa\\Presensi::infoDendaBulan] ringkas: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     public function index()
     {
         if (!$this->isSiswa()) {
@@ -171,6 +253,7 @@ class Presensi extends BaseController
             'today_cat'  => $today ? self::normalizeStatus($today->status ?? '') : null,
             'skor_disiplin' => $skorDisiplin,
             'riwayat_disiplin' => $riwayatDisiplin,
+            'denda'      => $this->infoDendaBulan((int) $siswa->id_siswa, (int) ($siswa->id_kelas ?? 0), $bulan),
             'logo_url'   => \App\Controllers\Admin\KartuSiswa::resolveLogoUrl($setting),
         ]);
     }
@@ -214,10 +297,16 @@ class Presensi extends BaseController
             return $this->response->setJSON(['status' => false, 'message' => 'Gagal memuat riwayat']);
         }
 
+        $stats = $this->monthStats((int) $siswa->id_siswa, $bulan);
+        $denda = $this->infoDendaBulan((int) $siswa->id_siswa, (int) ($siswa->id_kelas ?? 0), $bulan);
+        if ($denda !== null) {
+            $stats['denda'] = $denda;
+        }
+
         return $this->response->setJSON([
             'status' => true,
             'data'   => $rows,
-            'stats'  => $this->monthStats((int) $siswa->id_siswa, $bulan),
+            'stats'  => $stats,
         ]);
     }
 }

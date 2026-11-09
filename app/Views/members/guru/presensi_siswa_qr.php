@@ -644,8 +644,14 @@ $csrfHash  = csrf_hash();
                     <i class="bi bi-upc-scan absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                     <input type="text" id="manual-nis-input" class="m3-input pl-9 text-base font-bold tracking-wider"
                         placeholder="Contoh: 12345" autocomplete="off" required>
+                    <button type="button" id="btn-toggle-rfid-mobile"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 transition-all"
+                        title="Mode RFID (kirim sebagai rfid_value)">RFID</button>
+                    <button type="button" id="btn-toggle-fp-mobile"
+                        class="absolute right-48 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 transition-all"
+                        title="Mode Fingerprint (kirim sebagai fingerprint_uid)">FP</button>
                 </div>
-                <p class="text-[10px] text-slate-400 mt-1 mb-0">Nomor yang tercantum pada Kartu Absen.</p>
+                <p class="text-[10px] text-slate-400 mt-1 mb-0">Nomor yang tercantum pada Kartu Absen. Aktifkan RFID atau FP jika ini UID kartu RFID / UserID mesin sidik jari.</p>
             </div>
 
             <div class="mb-4">
@@ -983,6 +989,7 @@ $csrfHash  = csrf_hash();
     let isTorchOn        = false;
     let soundEnabled     = localStorage.getItem('presensi_qr_sound') !== '0';
     let voiceEnabled     = localStorage.getItem('presensi_qr_voice') !== '0';
+    let rfidMode         = localStorage.getItem('presensi_qr_rfid') === '1';
     let audioCtx         = null;
 
     // Popup & Scanner control
@@ -2250,8 +2257,72 @@ $csrfHash  = csrf_hash();
         }
         twModalHide('#modal-manual-input');
 
-        processScan(nis, selectedMode);
+        // Mode Fingerprint: kirim sebagai fingerprint_uid agar backend lookup fingerprint_uid.
+        if (fpMode) {
+            processFpScan(nis, selectedMode);
+        }
+        // Mode RFID: kirim sebagai rfid_value agar backend lookup nomor_rfid.
+        else if (rfidMode) {
+            processRfidScan(nis, selectedMode);
+        } else {
+            processScan(nis, selectedMode);
+        }
     };
+
+    // ── PROSES SCAN KARTU RFID (Mobile Manual) ─────────
+    function processRfidScan(rfidValue, scanMode) {
+        refreshModeTabs();
+        const gateMsg = blockedMsg(scanMode);
+        if (gateMsg) {
+            const gateRes = { status: false, message: gateMsg };
+            showScanPopup(gateRes, scanMode);
+            renderScanResult(gateRes);
+            return;
+        }
+        $('#scan-hint-text').text('Memproses kartu RFID...');
+
+        postJson(SCAN_URL, {
+            rfid_value: rfidValue,
+            mode:       scanMode,
+            id_kelas:   selectedKelas || 0,
+            lat:        kioskLoc.lat,
+            lng:        kioskLoc.lng,
+            accuracy:   kioskLoc.accuracy,
+            h:          '<?= esc($hash ?? '') ?>',
+        })
+        .done(res => {
+            showScanPopup(res, scanMode);
+            renderScanResult(res);
+            if (res.status && res.siswa) {
+                prependToHistory(res.siswa, scanMode);
+            }
+            loadHistory(false);
+        })
+        .fail((jqXHR, textStatus) => {
+            const code = jqXHR ? jqXHR.status : 0;
+            const resErr = jqXHR && jqXHR.responseJSON;
+            const serverMsg = resErr && resErr.message ? String(resErr.message) : '';
+            let msg;
+            if (code === 0) {
+                msg = 'Tidak ada koneksi ke server. Periksa internet lalu coba lagi.';
+            } else if (code === 401) {
+                msg = 'Sesi login habis. Silakan login ulang lalu scan kembali.';
+            } else if (code === 403) {
+                msg = serverMsg || 'Akses ditolak / token keamanan kedaluwarsa. Muat ulang halaman lalu coba lagi.';
+            } else if (code === 429) {
+                msg = serverMsg || 'Terlalu banyak scan. Tunggu sebentar lalu coba lagi.';
+            } else if (serverMsg) {
+                msg = serverMsg + ' (HTTP ' + code + ')';
+            } else {
+                msg = 'Gagal terhubung ke server presensi (HTTP ' + (code || '?') + ').';
+            }
+            showScanPopup({ status: false, message: msg }, scanMode);
+            renderScanResult({ status: false, message: msg });
+        })
+        .always(() => {
+            $('#scan-hint-text').text('Arahkan QR Card Siswa ke kamera');
+        });
+    }
 
     // ── Smooth Scroll Helpers ──────────────────────────
     window.scrollToScanner = function () {
@@ -2282,6 +2353,93 @@ $csrfHash  = csrf_hash();
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // ── RFID / FP MODE UI (Mobile Manual) ──────────────
+    let fpMode = localStorage.getItem('presensi_qr_fp') === '1';
+    function updateRfidModeMobileUI() {
+        const $btnRfid = $('#btn-toggle-rfid-mobile');
+        const $btnFp = $('#btn-toggle-fp-mobile');
+        if (rfidMode) {
+            $btnRfid.addClass('bg-emerald-500 text-white border-emerald-400').removeClass('bg-slate-100 text-slate-600 border-slate-300');
+        } else {
+            $btnRfid.removeClass('bg-emerald-500 text-white border-emerald-400').addClass('bg-slate-100 text-slate-600 border-slate-300');
+        }
+        if (fpMode) {
+            $btnFp.addClass('bg-purple-500 text-white border-purple-400').removeClass('bg-slate-100 text-slate-600 border-slate-300');
+        } else {
+            $btnFp.removeClass('bg-purple-500 text-white border-purple-400').addClass('bg-slate-100 text-slate-600 border-slate-300');
+        }
+    }
+    $('#btn-toggle-rfid-mobile').on('click', function () {
+        rfidMode = !rfidMode;
+        fpMode = false; // saling eksklusif
+        localStorage.setItem('presensi_qr_rfid', rfidMode ? '1' : '0');
+        localStorage.setItem('presensi_qr_fp', fpMode ? '1' : '0');
+        updateRfidModeMobileUI();
+    });
+    $('#btn-toggle-fp-mobile').on('click', function () {
+        fpMode = !fpMode;
+        rfidMode = false; // saling eksklusif
+        localStorage.setItem('presensi_qr_rfid', rfidMode ? '1' : '0');
+        localStorage.setItem('presensi_qr_fp', fpMode ? '1' : '0');
+        updateRfidModeMobileUI();
+    });
+    updateRfidModeMobileUI();
+
+    // ── PROSES SCAN FINGERPRINT (Mobile Manual) ─────────
+    function processFpScan(fpUid, scanMode) {
+        refreshModeTabs();
+        const gateMsg = blockedMsg(scanMode);
+        if (gateMsg) {
+            const gateRes = { status: false, message: gateMsg };
+            showScanPopup(gateRes, scanMode);
+            renderScanResult(gateRes);
+            return;
+        }
+        $('#scan-hint-text').text('Memproses fingerprint...');
+
+        postJson(SCAN_URL, {
+            fingerprint_uid: fpUid,
+            mode:            scanMode,
+            id_kelas:        selectedKelas || 0,
+            lat:             kioskLoc.lat,
+            lng:             kioskLoc.lng,
+            accuracy:        kioskLoc.accuracy,
+            h:               '<?= esc($hash ?? '') ?>',
+        })
+        .done(res => {
+            showScanPopup(res, scanMode);
+            renderScanResult(res);
+            if (res.status && res.siswa) {
+                prependToHistory(res.siswa, scanMode);
+            }
+            loadHistory(false);
+        })
+        .fail((jqXHR, textStatus) => {
+            const code = jqXHR ? jqXHR.status : 0;
+            const resErr = jqXHR && jqXHR.responseJSON;
+            const serverMsg = resErr && resErr.message ? String(resErr.message) : '';
+            let msg;
+            if (code === 0) {
+                msg = 'Tidak ada koneksi ke server. Periksa internet lalu coba lagi.';
+            } else if (code === 401) {
+                msg = 'Sesi login habis. Silakan login ulang lalu scan kembali.';
+            } else if (code === 403) {
+                msg = serverMsg || 'Akses ditolak / token keamanan kedaluwarsa. Muat ulang halaman lalu coba lagi.';
+            } else if (code === 429) {
+                msg = serverMsg || 'Terlalu banyak scan. Tunggu sebentar lalu coba lagi.';
+            } else if (serverMsg) {
+                msg = serverMsg + ' (HTTP ' + code + ')';
+            } else {
+                msg = 'Gagal terhubung ke server presensi (HTTP ' + (code || '?') + ').';
+            }
+            showScanPopup({ status: false, message: msg }, scanMode);
+            renderScanResult({ status: false, message: msg });
+        })
+        .always(() => {
+            $('#scan-hint-text').text('Arahkan QR Card Siswa ke kamera');
+        });
+    }
 
     // ── Initialization ─────────────────────────────────
     $(function () {

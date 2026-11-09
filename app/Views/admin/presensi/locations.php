@@ -748,10 +748,15 @@
     });
 
     function initMap() {
-        // Base Layer Maps: OSM & Satellite
-        osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // Basemap: Esri World Street Map (legacy MapServer).
+        // Riwayat: tile.openstreetmap.org diblokir OSM melanggar tile
+        // usage policy (app embed), lalu Carto (cartocdn) kini juga
+        // menyuntik watermark "API KEY REQUIRED" ke tile anonim. Jalur
+        // legacy Esri masih bebas-key dan sudah diverifikasi bodoh tile.
+        // Satelit bawah juga Esri (World_Imagery) — satu vendor konsisten.
+        osmLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
             maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+            attribution: '&copy; <a href="https://www.esri.com/">Esri</a> — sumber data: Esri, Maxar, Garmin, <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         });
 
         satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -799,7 +804,7 @@
             map.removeLayer(osmLayer);
             map.addLayer(satLayer);
             currentMapLayerIndex = 1;
-            $('#btnLayerToggle').addClass('bg-blue-50 text-blue-600').attr('title', 'Tampilkan Peta Jalan (OSM)');
+            $('#btnLayerToggle').addClass('bg-blue-50 text-blue-600').attr('title', 'Tampilkan Peta Jalan (Esri)');
         } else {
             map.removeLayer(satLayer);
             map.addLayer(osmLayer);

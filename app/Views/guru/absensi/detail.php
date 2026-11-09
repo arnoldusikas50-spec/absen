@@ -201,8 +201,11 @@ $(document).ready(function() {
     // Initialize map
     var map = L.map('map').setView([<?= $centerLat ?>, <?= $centerLng ?>], 15);
     
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    // Esri World Street Map — alih-alih tile.openstreetmap.org (dibanned
+    // OSM) dan cartocdn (menyuntik watermark "API KEY REQUIRED" di tile
+    // anonim, kasus Nov 2026). Jalur legacy Esri masih bebas-key.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a> — sumber data: Esri, Maxar, Garmin, <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
     
     var markers = [];

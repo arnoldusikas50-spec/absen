@@ -786,7 +786,6 @@ $routes->group('admin/presensi', ['filter' => 'auth'], function ($routes) {
 $routes->get('cron/daily', 'CronController::dailyProcess');
 $routes->get('cron/mark-alpha', 'CronController::markAlpha');
 $routes->get('cron/poin-siswa', 'CronController::poinSiswa');
-$routes->get('cron/daily-recap', 'CronController::dailyRecapNotification');
 $routes->get('cron/rekap-piket', 'CronController::rekapPiket');
 $routes->get('cron/semester-recap', 'CronController::semesterRecap');
 $routes->get('cron/weekly-denda', 'CronController::weeklyDendaRecap');

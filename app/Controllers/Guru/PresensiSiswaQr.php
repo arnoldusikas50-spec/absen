@@ -1031,8 +1031,191 @@ class PresensiSiswaQr extends BaseController
         $idKelas = (int) ($this->request->getPost('id_kelas') ?? 0);
         $tanggal = date('Y-m-d');
 
+        // ── RFID ────────────────────────────────────────────────────────
+        // RFID reader (USB keyboard wedge / Wiegand via ponte) mengirim
+        // UID kartu sebagai rfid_value. Jika dikirim, gunakan sebagai
+        // identifier utama dan abaikan qr_value.
+        $rfidValue = trim((string) ($this->request->getPost('rfid_value') ?? ''));
+        $rfidValue = preg_split('/\s+/', $rfidValue, 2)[0] ?? '';
+        $useRfid   = $rfidValue !== '';
+
+        if ($useRfid) {
+            // Cari siswa berdasarkan nomor_rfid terlebih dahulu.
+            $siswa = $this->findSiswaByRfid($rfidValue);
+            if ($siswa) {
+                // Validasi geofence & jam operasional sebelum proses siswa.
+                $lat      = $this->request->getPost('lat');
+                $lng      = $this->request->getPost('lng');
+                $accuracy = $this->request->getPost('accuracy');
+                $geoCheck = $this->checkScanLokasi($lat, $lng, $accuracy);
+                if (!$geoCheck['ok']) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $geoCheck['message']]);
+                }
+                $scanLoc = ['lat' => $geoCheck['lat'], 'lng' => $geoCheck['lng'], 'akurasi' => $geoCheck['accuracy'], 'lokasi_id' => $geoCheck['lokasi_id']];
+
+                if ($liburMsg = $this->isHariLibur($tanggal)) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $liburMsg]);
+                }
+                if (($winMsg = $this->isOutsideScanWindow($mode)) !== null) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $winMsg]);
+                }
+
+                $idGuru = $this->resolveGuruId();
+                $db     = \Config\Database::connect();
+                $jam    = date('H:i:s');
+
+                // Lookup satu baris per siswa per hari.
+                $existing = $db->table('presensi_siswa')
+                    ->where('id_siswa', $siswa->id_siswa)
+                    ->where('tgl', $tanggal)
+                    ->get()->getRow();
+                if ($existing && (int) ($existing->id_kelas ?? 0) > 0) {
+                    $idKelas = (int) $existing->id_kelas;
+                }
+                if ($idKelas <= 0) {
+                    $idKelas = $this->getKelasAktifSiswa((int)$siswa->id_siswa);
+                }
+                if ($idKelas <= 0) {
+                    return $this->response->setJSON([
+                        'status'  => false,
+                        'type'    => 'error',
+                        'message' => "Siswa {$siswa->nama} tidak terdaftar di kelas aktif.",
+                        'siswa'   => $this->formatSiswaInfo($siswa, null, 0),
+                    ]);
+                }
+
+                if (!self::isSiswaAktif((int) $siswa->id_siswa)) {
+                    return $this->response->setJSON([
+                        'status'  => false,
+                        'type'    => 'error',
+                        'message' => "Siswa {$siswa->nama} sudah tidak aktif (lulus/pindah/keluar) sehingga tidak dapat diabsen.",
+                        'siswa'   => $this->formatSiswaInfo($siswa, null, $idKelas),
+                    ]);
+                }
+
+                if ($mode === 'masuk') {
+                    if (($jadwalMsg = $this->isOutsideJadwalMasukSiswa($tanggal, $jam)) !== null) {
+                        return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $jadwalMsg]);
+                    }
+                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                }
+                if (($pulangMsg = $this->isTooEarlyPulangSiswa($tanggal, $jam)) !== null) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $pulangMsg]);
+                }
+                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+            }
+
+            // Fallback: cek guru/GTK berdasarkan nomor_rfid.
+            $guru = $this->findGuruByRfid($rfidValue);
+            if ($guru) {
+                return $this->processGuruScan($guru, $mode, $tanggal, [
+                    'lat' => $this->request->getPost('lat'),
+                    'lng' => $this->request->getPost('lng'),
+                    'akurasi' => $this->request->getPost('accuracy'),
+                    'lokasi_id' => null,
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status'  => false,
+                'type'    => 'error',
+                'message' => 'Kartu RFID tidak terdaftar. Hubungi admin untuk pendaftaran kartu.',
+            ]);
+        }
+
+        // ── Fingerprint (GEISA GX330 via HTTP Push) ───────────────────────
+        // Mesin sidik jari mengirim UID/UserID sebagai fingerprint_uid
+        // (atau user_id). Jika dikirim, gunakan sebagai identifier utama.
+        $fpUid = trim((string) ($this->request->getPost('fingerprint_uid') ?? $this->request->getPost('user_id') ?? ''));
+        $fpUid = preg_split('/\s+/', $fpUid, 2)[0] ?? '';
+        $useFp = $fpUid !== '';
+
+        if ($useFp) {
+            // Cari siswa berdasarkan fingerprint_uid terlebih dahulu.
+            $siswa = $this->findSiswaByFingerprint($fpUid);
+            if ($siswa) {
+                // Validasi geofence & jam operasional sebelum proses siswa.
+                $lat      = $this->request->getPost('lat');
+                $lng      = $this->request->getPost('lng');
+                $accuracy = $this->request->getPost('accuracy');
+                $geoCheck = $this->checkScanLokasi($lat, $lng, $accuracy);
+                if (!$geoCheck['ok']) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $geoCheck['message']]);
+                }
+                $scanLoc = ['lat' => $geoCheck['lat'], 'lng' => $geoCheck['lng'], 'akurasi' => $geoCheck['accuracy'], 'lokasi_id' => $geoCheck['lokasi_id']];
+
+                if ($liburMsg = $this->isHariLibur($tanggal)) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $liburMsg]);
+                }
+                if (($winMsg = $this->isOutsideScanWindow($mode)) !== null) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $winMsg]);
+                }
+
+                $idGuru = $this->resolveGuruId();
+                $db     = \Config\Database::connect();
+                $jam    = date('H:i:s');
+
+                // Lookup satu baris per siswa per hari.
+                $existing = $db->table('presensi_siswa')
+                    ->where('id_siswa', $siswa->id_siswa)
+                    ->where('tgl', $tanggal)
+                    ->get()->getRow();
+                if ($existing && (int) ($existing->id_kelas ?? 0) > 0) {
+                    $idKelas = (int) $existing->id_kelas;
+                }
+                if ($idKelas <= 0) {
+                    $idKelas = $this->getKelasAktifSiswa((int)$siswa->id_siswa);
+                }
+                if ($idKelas <= 0) {
+                    return $this->response->setJSON([
+                        'status'  => false,
+                        'type'    => 'error',
+                        'message' => "Siswa {$siswa->nama} tidak terdaftar di kelas aktif.",
+                        'siswa'   => $this->formatSiswaInfo($siswa, null, 0),
+                    ]);
+                }
+
+                if (!self::isSiswaAktif((int) $siswa->id_siswa)) {
+                    return $this->response->setJSON([
+                        'status'  => false,
+                        'type'    => 'error',
+                        'message' => "Siswa {$siswa->nama} sudah tidak aktif (lulus/pindah/keluar) sehingga tidak dapat diabsen.",
+                        'siswa'   => $this->formatSiswaInfo($siswa, null, $idKelas),
+                    ]);
+                }
+
+                if ($mode === 'masuk') {
+                    if (($jadwalMsg = $this->isOutsideJadwalMasukSiswa($tanggal, $jam)) !== null) {
+                        return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $jadwalMsg]);
+                    }
+                    return $this->processCheckIn($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+                }
+                if (($pulangMsg = $this->isTooEarlyPulangSiswa($tanggal, $jam)) !== null) {
+                    return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => $pulangMsg]);
+                }
+                return $this->processCheckOut($db, $siswa, $existing, $idKelas, $idGuru, $tanggal, $jam, $scanLoc);
+            }
+
+            // Fallback: cek guru/GTK berdasarkan fingerprint_uid.
+            $guru = $this->findGuruByFingerprint($fpUid);
+            if ($guru) {
+                return $this->processGuruScan($guru, $mode, $tanggal, [
+                    'lat' => $this->request->getPost('lat'),
+                    'lng' => $this->request->getPost('lng'),
+                    'akurasi' => $this->request->getPost('accuracy'),
+                    'lokasi_id' => null,
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status'  => false,
+                'type'    => 'error',
+                'message' => 'Sidik jari tidak terdaftar. Hubungi admin untuk pendaftaran UserID mesin.',
+            ]);
+        }
+
         if ($qrValue === '') {
-            return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => 'QR Code atau NIS kosong.']);
+            return $this->response->setJSON(['status' => false, 'type' => 'error', 'message' => 'QR Code, NIS, atau kartu RFID kosong.']);
         }
         if (!in_array($mode, ['masuk', 'keluar'], true)) {
             return $this->response->setStatusCode(400)->setJSON([
@@ -1703,6 +1886,26 @@ class PresensiSiswaQr extends BaseController
     }
 
     /**
+     * Cari siswa berdasarkan nomor_rfid (UID kartu RFID).
+     */
+    private function findSiswaByRfid(string $rfidValue): ?object
+    {
+        try {
+            $db = \Config\Database::connect();
+            if (!$db->tableExists('master_siswa') || !$db->fieldExists('nomor_rfid', 'master_siswa')) {
+                return null;
+            }
+            $row = $db->table('master_siswa')
+                ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin, nomor_rfid')
+                ->where('nomor_rfid', $rfidValue)
+                ->get()->getRow();
+            return $row ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * Status AKTIF? (buku_induk.status = '1').
      * Tanpa baris buku_induk (data lama) dianggap AKTIF.
      */
@@ -2146,6 +2349,66 @@ class PresensiSiswaQr extends BaseController
             }
 
             return null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cari guru/GTK berdasarkan nomor_rfid (UID kartu RFID).
+     */
+    private function findGuruByRfid(string $rfidValue): ?object
+    {
+        try {
+            $db = \Config\Database::connect();
+            if (!$db->tableExists('master_guru') || !$db->fieldExists('nomor_rfid', 'master_guru')) {
+                return null;
+            }
+            $row = $db->table('master_guru')
+                ->select('id_guru, id_user, nama_guru, nip, kode_guru, username, foto, nomor_rfid')
+                ->where('nomor_rfid', $rfidValue)
+                ->get()->getRow();
+            return $row ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cari siswa berdasarkan fingerprint_uid (UserID mesin sidik jari GEISA).
+     */
+    private function findSiswaByFingerprint(string $fingerprintUid): ?object
+    {
+        try {
+            $db = \Config\Database::connect();
+            if (!$db->tableExists('master_siswa') || !$db->fieldExists('fingerprint_uid', 'master_siswa')) {
+                return null;
+            }
+            $row = $db->table('master_siswa')
+                ->select('id_siswa, nama, nis, nisn, foto, jenis_kelamin, fingerprint_uid')
+                ->where('fingerprint_uid', $fingerprintUid)
+                ->get()->getRow();
+            return $row ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cari guru/GTK berdasarkan fingerprint_uid (UserID mesin sidik jari GEISA).
+     */
+    private function findGuruByFingerprint(string $fingerprintUid): ?object
+    {
+        try {
+            $db = \Config\Database::connect();
+            if (!$db->tableExists('master_guru') || !$db->fieldExists('fingerprint_uid', 'master_guru')) {
+                return null;
+            }
+            $row = $db->table('master_guru')
+                ->select('id_guru, id_user, nama_guru, nip, kode_guru, username, foto, fingerprint_uid')
+                ->where('fingerprint_uid', $fingerprintUid)
+                ->get()->getRow();
+            return $row ?: null;
         } catch (\Throwable $e) {
             return null;
         }

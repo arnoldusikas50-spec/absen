@@ -79,7 +79,9 @@ class CronController extends BaseController
         $log[] = $this->generateWarningLetters($db, $setting);
         $log[] = $this->generateSuratPanggilan($db, $setting);
         $log[] = $this->checkKehadiranThreshold($db, $setting);
-        $log[] = $this->sendDailyRecap($db, $setting);
+        // Rekap presensi harian ke grup tidak lagi dikirim dari sini:
+        // digantikan /cron/rekap-piket (18:30) yang menyusun payload sama
+        // lengkap dengan konteks piket. Lihat sendPiketRecap().
         $log[] = $this->markForgotCheckout($db, $setting);
         // Penalti menyusul pengingat: guru masih punya seluruh jam kerja hari
         // itu untuk absen pulang, dan yang dipotong hanya hari-hari sebelum ini.
@@ -109,38 +111,6 @@ class CronController extends BaseController
         }
 
         return $response;
-    }
-
-    /**
- * Hanya kirim rekap harian (notifikasi).
- * GET /cron/daily-recap?key=...
- *
- * Endpoint ini adalah alat manual operator (dari CRONTAB.MD), jadi punya
- * penjaga yang sama dengan /cron/daily: kalau rekap hari ini sudah
- * terkirim, permintaannya dilewati dan diberi tahu alasannya — bukan
- * diam-diam mengirim ulang.
- *
- * Tambahkan `&force=1` untuk memang sengaja mengirim ulang.
- */
-public function dailyRecapNotification()
-{
-    if (!$this->validateKey()) {
-        return $this->response->setStatusCode(403)->setBody('Invalid key');
-    }
-
-    $db      = \Config\Database::connect();
-    $setting = $this->settingModel->first();
-
-    $force = $this->dimintaForce();
-
-    $result = $this->sendDailyRecap($db, $setting, $force);
-    $failed = $this->isSendFailure($result);
-
-        // HTTP 500 supaya pemantau cron (atau crontab yang memindai output)
-        // langsung tahu ada masalah, bukan mengira semuanya beres.
-        return $this->response
-            ->setStatusCode($failed ? 500 : 200)
-            ->setBody($result . ' — ' . date('Y-m-d H:i:s'));
     }
 
     /**
@@ -1318,89 +1288,6 @@ public function dailyRecapNotification()
         $this->catatNotifikasiCron('kehadiran_rendah', $kunciBulan, true);
 
         return $ringkas;
-    }
-
-    /**
-     * Kirim rekap kehadiran harian via notifikasi.
-     *
-     * String yang dikembalikan ikut masuk cron.log, jadi harus jujur: dulu
-     * method ini selalu mengembalikan "Daily recap sent" walau Telegram
-     * menolak, sehingga kegagalan tidak pernah terlihat.
-     */
-    private function sendDailyRecap($db, $setting, bool $force = false): string
-    {
-        $today = date('Y-m-d');
-
-        if ($skip = $this->grupDinonaktifkan('rekap_harian', 'Rekap harian')) {
-            return $skip;
-        }
-
-        // Libur (mingguan + kalender + jadwal sekolah) dari AttendancePolicy,
-        // sumber yang sama dengan gate absensi, alpha cron, dan rekap.
-        if ($libur = \App\Services\AttendancePolicy::alasanLibur($today)) {
-            return 'Skip: ' . $libur;
-        }
-
-        // Penjaga kirim ulang: `/cron/daily` (18:00) dan `/cron/daily-recap`
-        // memanggil method yang sama, dan CRONTAB.MD menyuruh operator
-        // memanggil yang kedua untuk mengirim ulang rekap yang gagal. Tanpa
-        // penjaga ini, rekap yang sudah berhasil terkirim pukul 18:00 akan
-        // terkirim lagi begitu operator menjalankannya.
-        //
-        // $force dipakai endpoint manual dengan `?force=1` — itu tetap satu
-        // pengiriman tambahan, bukan pengulangan otomatis.
-        if (! $force && $this->notifikasiCronTerkirim('rekap_harian', $today)) {
-            return 'Rekap hari ini sudah terkirim sebelumnya, dilewati. '
-                . 'Gunakan /cron/daily-recap?force=1 untuk mengirim ulang.';
-        }
-
-        $stats = $db->table('absensi_harian')
-            ->select("
-                COUNT(*) as total,
-                SUM(CASE WHEN status_masuk = 'ONTIME'  THEN 1 ELSE 0 END) as hadir,
-                SUM(CASE WHEN status_masuk = 'LATE'    THEN 1 ELSE 0 END) as telat,
-                SUM(CASE WHEN status_masuk IN ('IJIN','IZIN') THEN 1 ELSE 0 END) as izin,
-                SUM(CASE WHEN status_masuk = 'SAKIT'   THEN 1 ELSE 0 END) as sakit,
-                SUM(CASE WHEN status_masuk IN ('ALPHA','ALPA') THEN 1 ELSE 0 END) as alpha,
-                SUM(CASE WHEN status_masuk = 'DINAS_APPROVED' THEN 1 ELSE 0 END) as dinas,
-                SUM(CASE WHEN status_masuk = 'WFH'     THEN 1 ELSE 0 END) as wfh,
-                SUM(CASE WHEN status_masuk = 'PENDING_VERIFICATION' THEN 1 ELSE 0 END) as pending
-            ")
-            ->where('tgl', $today)
-            ->get()->getRow();
-
-        try {
-            $sent = $this->notification->notifyRekapHarian([
-                'total' => (int) ($stats->total ?? 0),
-                'hadir' => (int) ($stats->hadir ?? 0),
-                'telat' => (int) ($stats->telat ?? 0),
-                'izin'  => (int) ($stats->izin  ?? 0),
-                'sakit' => (int) ($stats->sakit ?? 0),
-                'alpha' => (int) ($stats->alpha ?? 0),
-                'dinas' => (int) ($stats->dinas ?? 0),
-                'wfh'   => (int) ($stats->wfh ?? 0),
-                'pending' => (int) ($stats->pending ?? 0),
-            ]);
-        } catch (\Throwable $e) {
-            $this->logCronFailure('Daily recap', $e->getMessage());
-            $this->catatNotifikasiCron('rekap_harian', $today, false, $e->getMessage());
-
-            return 'Rekap GAGAL: ' . $e->getMessage();
-        }
-
-        if ($sent !== true) {
-            $reason = $this->notification->lastError !== ''
-                ? $this->notification->lastError
-                : 'Telegram tidak menerima (tanpa keterangan)';
-            $this->logCronFailure('Daily recap', $reason);
-            $this->catatNotifikasiCron('rekap_harian', $today, false, $reason);
-
-            return 'Rekap GAGAL: ' . $reason;
-        }
-
-        $this->catatNotifikasiCron('rekap_harian', $today, true);
-
-        return 'Daily recap sent';
     }
 
     /**
@@ -2713,9 +2600,11 @@ public function dailyRecapNotification()
         //    belum di-apply BUKAN pembayaran — sebelumnya dihitung ganda
         //    (di pembayaran + di redemption) sehingga dibayar terlihat
         //    lebih besar dari kas sebenarnya.
+        //    Split: TUNAI → saldo cash, POIN → potong dari poin.
         $dibayarMap = [];
+        $cashMap    = [];
+        $poinMap    = [];
         if ($db->tableExists('absensi_pembayaran_denda')) {
-            // Pembayaran berdasarkan tanggal bayar dalam rentang
             $hasTglBayar = $db->fieldExists('tanggal_bayar', 'absensi_pembayaran_denda');
             $hasNominalBayar = $db->fieldExists('nominal_bayar', 'absensi_pembayaran_denda');
 
@@ -2724,11 +2613,11 @@ public function dailyRecapNotification()
                     ? 'COALESCE(NULLIF(nominal_bayar, 0), total_denda, 0)'
                     : 'COALESCE(total_denda, 0)';
                 $bayarRaw = $db->query("
-                    SELECT user_id, SUM({$nominalCol}) as total
+                    SELECT user_id, metode_bayar, SUM({$nominalCol}) as total
                     FROM absensi_pembayaran_denda
                     WHERE tanggal_bayar >= ? AND tanggal_bayar <= ?
                       AND status != 'batal'
-                    GROUP BY user_id
+                    GROUP BY user_id, metode_bayar
                 ", [$startDate, $endDate])->getResult();
             } else {
                 // Fallback: gunakan bulan/tahun
@@ -2738,15 +2627,25 @@ public function dailyRecapNotification()
                     ? 'COALESCE(NULLIF(nominal_bayar, 0), total_denda, 0)'
                     : 'COALESCE(total_denda, 0)';
                 $bayarRaw = $db->query("
-                    SELECT user_id, SUM({$nominalCol}) as total
+                    SELECT user_id, metode_bayar, SUM({$nominalCol}) as total
                     FROM absensi_pembayaran_denda
                     WHERE bulan = ? AND tahun = ? AND status != 'batal'
-                    GROUP BY user_id
+                    GROUP BY user_id, metode_bayar
                 ", [$bln, $thn])->getResult();
             }
 
             foreach ($bayarRaw as $r) {
-                $dibayarMap[(int) $r->user_id] = (float) $r->total;
+                $uid      = (int) $r->user_id;
+                $nominal  = (float) $r->total;
+                $kelasBayar = \App\Services\AttendancePenaltyService::kelasPembayaranDenda(
+                    $r->metode_bayar ?? null, null
+                );
+                $dibayarMap[$uid] = ($dibayarMap[$uid] ?? 0.0) + $nominal;
+                if ($kelasBayar === 'POIN') {
+                    $poinMap[$uid] = ($poinMap[$uid] ?? 0.0) + $nominal;
+                } else {
+                    $cashMap[$uid] = ($cashMap[$uid] ?? 0.0) + $nominal;
+                }
             }
         }
 
@@ -2762,9 +2661,12 @@ public function dailyRecapNotification()
             log_message('error', '[RekapDendaMingguan] sisa kanonik gagal: ' . $e->getMessage());
         }
 
-        // 4. Compile per guru
+        // 4. Compile per guru (tanpa daftar sisa per guru di pesan — cukup
+        //    agregat minggu ini + sisa akumulasi total).
         $globalTotalDenda   = 0.0;
         $globalTotalDibayar = 0.0;
+        $globalCash         = 0.0;
+        $globalPoin         = 0.0;
         $globalSisa         = 0.0;
         $details = [];
 
@@ -2774,6 +2676,8 @@ public function dailyRecapNotification()
             // sisa akumulasi (kanonik lintas tahun, sama dengan tabel admin).
             $totalDenda   = ($dendaHarianMap[$uid] ?? 0.0) + ($estimasiMingguMap[$uid] ?? 0.0);
             $totalDibayar = $dibayarMap[$uid] ?? 0.0;
+            $totalCash    = $cashMap[$uid] ?? 0.0;
+            $totalPoin    = $poinMap[$uid] ?? 0.0;
             // Fallback minggu (basis lama) hanya bila hitung kanonik gagal.
             $sisa         = array_key_exists($uid, $sisaKanonikMap)
                 ? (float) $sisaKanonikMap[$uid]
@@ -2781,12 +2685,16 @@ public function dailyRecapNotification()
 
             $globalTotalDenda   += $totalDenda;
             $globalTotalDibayar += $totalDibayar;
+            $globalCash         += $totalCash;
+            $globalPoin         += $totalPoin;
             $globalSisa         += $sisa;
 
             $details[] = [
                 'nama'          => $guru->nama_guru ?? 'Guru',
                 'total_denda'   => $totalDenda,
                 'total_dibayar' => $totalDibayar,
+                'total_cash'    => $totalCash,
+                'total_poin'    => $totalPoin,
                 'sisa'          => $sisa,
             ];
         }
@@ -2794,6 +2702,8 @@ public function dailyRecapNotification()
         $summary = [
             'total_denda'   => $globalTotalDenda,
             'total_dibayar' => $globalTotalDibayar,
+            'total_cash'    => $globalCash,
+            'total_poin'    => $globalPoin,
             'sisa'          => $globalSisa,
         ];
 
@@ -2810,7 +2720,8 @@ public function dailyRecapNotification()
         $guruDenda = count(array_filter($details, static fn($d) => $d['total_denda'] > 0));
         $ringkasan = "rekap denda mingguan ({$guruDenda} guru kena denda, "
             . 'timbul Rp ' . number_format($globalTotalDenda, 0, ',', '.') . ', '
-            . 'sisa akumulasi Rp ' . number_format($globalSisa, 0, ',', '.') . ')';
+            . 'dibayar Rp ' . number_format($globalTotalDibayar, 0, ',', '.') . ', '
+            . 'sisa Rp ' . number_format($globalSisa, 0, ',', '.') . ')';
 
         if ($sent !== true) {
             $reason = $this->notification->lastError !== ''
